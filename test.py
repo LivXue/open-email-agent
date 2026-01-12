@@ -17,10 +17,9 @@ chat_model = ChatOpenAI(
     base_url=os.getenv("MIMO_BASE_URL"),
     api_key=os.getenv("MIMO_API_KEY"),
     temperature=0.7,
-    extra_body={
-                #"thinking": {"type": "enabled"},
-                "stream": True,
-                },
+    # extra_body={
+    #             "thinking": {"type": "enabled"},
+    #             },
 )
 
 tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
@@ -58,22 +57,12 @@ agent = create_deep_agent(
     # backend=FilesystemBackend(root_dir="/data/xuedizhan/deepagents/tmp"),
 )
 
-async def main():
-    messages = []
-    while True:
-        user_input = input("================================== User Input ==================================\n")
-        messages.append({"role": "user", "content": user_input})
-        # result = agent.invoke({"messages": messages})
-        # cur_len = len(messages)
-        # messages = result["messages"]
-        # for msg in messages[cur_len:]:
-        #     msg.pretty_print()
-        async for chunk in agent.astream({"messages": messages}):
-            try:
-                chunk["messages"][-1].pretty_print()
-            except:
-                pass
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+messages = []
+while True:
+    user_input = input("================================== User Input ==================================\n")
+    messages.append({"role": "user", "content": user_input})
+    result = agent.invoke({"messages": messages})
+    cur_len = len(messages)
+    messages = result["messages"]
+    for msg in messages[cur_len:]:
+        msg.pretty_print()
