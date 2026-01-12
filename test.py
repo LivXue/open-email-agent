@@ -1,8 +1,6 @@
 import os
 import json
 from dotenv import load_dotenv
-
-# Load environment variables from .env file
 load_dotenv()
 
 from langchain_openai import ChatOpenAI
@@ -11,6 +9,9 @@ from deepagents.backends import FilesystemBackend, CompositeBackend, StateBacken
 from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.memory import MemorySaver
 from tavily import TavilyClient
+
+from prompt import MAIN_PROMPT
+from email_tools import email_dashboard
 
 chat_model = ChatOpenAI(
     model="mimo-v2-flash",
@@ -45,16 +46,12 @@ def make_backend(runtime):
         }
     )
 
-system_prompt = "You are a helpful assistant."
 agent = create_deep_agent(
     model=chat_model,
-    system_prompt=system_prompt,
-    tools=[internet_search],
+    system_prompt=MAIN_PROMPT,
+    tools=[internet_search, email_dashboard],
     subagents=[email_writer_subagent],
-    store=InMemoryStore(),
-    backend=make_backend,
-    checkpointer=checkpointer,
-    # backend=FilesystemBackend(root_dir="/data/xuedizhan/deepagents/tmp"),
+    backend=FilesystemBackend(root_dir="/data/xuedizhan/deepagents/tmp"),
 )
 
 messages = []
