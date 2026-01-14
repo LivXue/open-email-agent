@@ -22,6 +22,7 @@ from deepagents.backends import StateBackend
 from deepagents.backends.protocol import BackendFactory, BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.middleware.memory import MemoryMiddleware
+from deepagents.middleware.parse_reasoning_tool_calls import ParseReasoningToolCallsMiddleware
 from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from deepagents.middleware.skills import SkillsMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent, SubAgent, SubAgentMiddleware
@@ -147,6 +148,7 @@ def create_deep_agent(
                 trim_tokens_to_summarize=None,
             ),
             AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
+            ParseReasoningToolCallsMiddleware(),
             PatchToolCallsMiddleware(),
         ]
     )
@@ -177,6 +179,7 @@ def create_deep_agent(
                 trim_tokens_to_summarize=None,
             ),
             AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
+            ParseReasoningToolCallsMiddleware(),
             PatchToolCallsMiddleware(),
         ]
     )

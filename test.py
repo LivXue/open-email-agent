@@ -3,24 +3,26 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
-from langchain_openai import ChatOpenAI
+from langchain_qwq import ChatQwQ
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend, CompositeBackend, StateBackend, StoreBackend
 from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.memory import MemorySaver
 from tavily import TavilyClient
 
+from utils import pretty_print, get_fs_system
 from prompt import MAIN_PROMPT
-from email_tools import email_dashboard
+from email_tools import email_dashboard, read_emails, send_email, delete_email, search_address_book
 
-chat_model = ChatOpenAI(
+display_reasoning = os.getenv("DISPLAY_REASONING") == "True"
+chat_model = ChatQwQ(
     model="mimo-v2-flash",
     base_url=os.getenv("MIMO_BASE_URL"),
     api_key=os.getenv("MIMO_API_KEY"),
     temperature=0.7,
-    # extra_body={
-    #             "thinking": {"type": "enabled"},
-    #             },
+    extra_body={
+                "thinking": {"type": "enabled"},
+                },
 )
 
 tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
@@ -49,9 +51,9 @@ def make_backend(runtime):
 agent = create_deep_agent(
     model=chat_model,
     system_prompt=MAIN_PROMPT,
-    tools=[internet_search, email_dashboard],
+    tools=[internet_search, email_dashboard, read_emails, send_email, delete_email, search_address_book],
     subagents=[email_writer_subagent],
-    backend=FilesystemBackend(root_dir="/data/xuedizhan/deepagents/tmp"),
+    backend=get_fs_system(),
 )
 
 messages = []
@@ -62,4 +64,4 @@ while True:
     cur_len = len(messages)
     messages = result["messages"]
     for msg in messages[cur_len:]:
-        msg.pretty_print()
+        pretty_print(msg, display_reasoning)

@@ -218,3 +218,5 @@ libs/deepagents-cli/TEXTUAL_PROGRESS.md
 
 /tmp/
 */tmp/
+
+.env
