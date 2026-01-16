@@ -16,16 +16,34 @@ interface ServiceStatus {
 export function StatusBar() {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
+
     const fetchStatus = async () => {
       try {
         const response = await api.get('/health');
-        setStatus(response.data.services);
-      } catch (error) {
-        console.error('Failed to fetch status:', error);
-      } finally {
-        setLoading(false);
+        if (isMounted) {
+          setStatus(response.data.services);
+          setError(false);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch status:', err);
+        if (isMounted) {
+          // Retry a few times on initial load
+          if (loading && retryCount < maxRetries) {
+            retryCount++;
+            console.log(`Retrying... (${retryCount}/${maxRetries})`);
+            setTimeout(() => fetchStatus(), 2000);
+          } else {
+            setError(true);
+            setLoading(false);
+          }
+        }
       }
     };
 
@@ -33,9 +51,14 @@ export function StatusBar() {
     fetchStatus();
 
     // Poll every 5 seconds
-    const interval = setInterval(fetchStatus, 5000);
+    const interval = setInterval(() => {
+      fetchStatus();
+    }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   if (loading) {
@@ -44,6 +67,17 @@ export function StatusBar() {
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Loading service status...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white border-b border-gray-200 px-6 py-2">
+        <div className="flex items-center gap-2 text-sm text-red-600">
+          <XCircle className="w-4 h-4" />
+          <span>Failed to connect to backend service</span>
         </div>
       </div>
     );

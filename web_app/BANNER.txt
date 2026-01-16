@@ -50,7 +50,7 @@
 │                                                                   │
 └───────────────────────────────────────────────────────────────────┘
 
-                      Powered by DeepAgents
-                  https://github.com/anthropics/deepagents
+                      Powered by MailMind Team
+                  https://github.com/LivXue/open-email-agent
 
                            ━━━━━━━━━━━━━━━━━━━━━━━━

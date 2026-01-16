@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 from langchain.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -80,7 +80,7 @@ class MemoryState(AgentState):
             Marked as private so it's not included in the final agent state.
     """
 
-    memory_contents: NotRequired[Annotated[dict[str, str], PrivateStateAttr]]
+    memory_contents: Annotated[dict[str, str] | None, PrivateStateAttr] = None
 
 
 class MemoryStateUpdate(TypedDict):

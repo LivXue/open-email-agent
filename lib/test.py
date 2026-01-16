@@ -11,7 +11,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from tavily import TavilyClient
 
 from utils import pretty_print, pretty_print_stream, get_fs_system
-from prompt import MAIN_PROMPT
+from prompt import get_main_prompt
 from email_tools import email_dashboard, read_emails, send_email, delete_email, flag_email, list_folders, search_address_book, download_attachments
 
 display_reasoning = os.getenv("DISPLAY_REASONING") == "True"
@@ -50,7 +50,7 @@ def make_backend(runtime):
 
 agent = create_deep_agent(
     model=chat_model,
-    system_prompt=MAIN_PROMPT,
+    system_prompt=get_main_prompt(),
     tools=[internet_search, email_dashboard, read_emails, send_email, delete_email, flag_email, list_folders, search_address_book, download_attachments],
     subagents=[email_writer_subagent],
     backend=get_fs_system(),

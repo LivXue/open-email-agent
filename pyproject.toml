@@ -1,5 +1,5 @@
 [project]
-name = "deepagents"
+name = "mailmind"
 version = "0.3.5"
 description = "General purpose 'deep agent' with sub-agent spawning, todo list capabilities, and mock file system. Built on LangGraph."
 readme = "README.md"
@@ -15,12 +15,7 @@ dependencies = [
 
 
 [project.urls]
-Homepage = "https://docs.langchain.com/oss/python/deepagents/overview"
-Documentation = "https://reference.langchain.com/python/deepagents/"
-Source = "https://github.com/langchain-ai/deepagents"
-Twitter = "https://x.com/LangChainAI"
-Slack = "https://www.langchain.com/join-community"
-Reddit = "https://www.reddit.com/r/LangChain/"
+Homepage = "https://github.com/LivXue/open-email-agent"
 
 
 [dependency-groups]
@@ -98,30 +93,6 @@ ignore-var-parameters = true
 "deepagents/middleware/filesystem.py" = ["EM102", "TRY003"]
 "deepagents/middleware/memory.py" = ["E501", "EM102", "G004", "PERF401", "SIM108", "T201", "TC002", "TC003", "TRY003"]
 "deepagents/middleware/skills.py" = ["EM101", "SIM108", "TC002", "TC003", "TRY003"]
-"tests/integration_tests/test_deepagents.py" = ["ANN201", "C419", "E731", "PLR2004", "SIM118", "TID252"]
-"tests/integration_tests/test_filesystem_middleware.py" = ["ANN001", "ANN201", "ANN202", "ARG002", "E731", "PLR2004", "SIM118", "T201", "TID252"]
-"tests/integration_tests/test_hitl.py" = ["ANN201", "C419", "E501", "PLR2004", "TID252"]
-"tests/integration_tests/test_subagent_middleware.py" = ["ANN001", "ANN201", "F841", "RUF012", "SIM118"]
-"tests/unit_tests/backends/test_composite_backend.py" = ["ANN001", "ANN201", "ANN202", "ARG001", "ARG002", "F841", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/backends/test_composite_backend_async.py" = ["ANN001", "ANN201", "ANN202", "ARG001", "ARG002", "F841", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/backends/test_filesystem_backend.py" = ["ANN201", "ARG005", "B007", "B011", "INP001", "PLR2004", "PT015", "PT018"]
-"tests/unit_tests/backends/test_filesystem_backend_async.py" = ["ANN201", "ARG005", "B007", "INP001", "PLR2004", "PT011", "PT018"]
-"tests/unit_tests/backends/test_state_backend.py" = ["ANN001", "ANN201", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/backends/test_state_backend_async.py" = ["ANN001", "ANN201", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/backends/test_store_backend.py" = ["ANN201", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/backends/test_store_backend_async.py" = ["ANN201", "INP001", "PLR2004", "PT018"]
-"tests/unit_tests/chat_model.py" = ["ARG002", "D301", "PLR0912", "RUF012"]
-"tests/unit_tests/middleware/test_memory_middleware.py" = ["F841", "PGH003", "PLR2004", "RUF001", "TC002"]
-"tests/unit_tests/middleware/test_memory_middleware_async.py" = ["F841", "PGH003", "PLR2004", "RUF001"]
-"tests/unit_tests/middleware/test_skills_middleware.py" = ["F841", "PGH003", "PLR2004", "TC002"]
-"tests/unit_tests/middleware/test_skills_middleware_async.py" = ["F841", "PGH003", "PLR2004"]
-"tests/unit_tests/middleware/test_validate_path.py" = ["ANN201"]
-"tests/unit_tests/test_end_to_end.py" = ["ARG002", "PLR2004"]
-"tests/unit_tests/test_middleware.py" = ["ANN001", "ANN201", "ANN202", "ARG002", "E731", "PLR2004", "SIM118", "T201"]
-"tests/unit_tests/test_middleware_async.py" = ["ANN001", "ANN201", "ANN202", "ARG002"]
-"tests/unit_tests/test_subagents.py" = ["PLR2004"]
-"tests/unit_tests/test_todo_middleware.py" = ["E501", "PLR2004"]
-"tests/utils.py" = ["ANN001", "ANN201", "RUF012", "SIM118"]
 
 [tool.mypy]
 strict = true

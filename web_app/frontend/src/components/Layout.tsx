@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, Mail, Settings } from 'lucide-react';
+import { MessageSquare, Mail, Users, Settings } from 'lucide-react';
 import { StatusBar } from './StatusBar';
 
 interface LayoutProps {
@@ -11,7 +11,8 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { path: '/', label: 'Chat', icon: MessageSquare },
-    { path: '/emails', label: 'Emails', icon: Mail },
+    { path: '/emails', label: 'Emails (Unfinished)', icon: Mail },
+    { path: '/contacts', label: 'Contacts', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -56,7 +57,7 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="p-4 border-t border-gray-200">
             <div className="text-xs text-gray-500 text-center">
-              Powered by DeepAgents
+              Powered by MailMind Team
             </div>
           </div>
         </nav>

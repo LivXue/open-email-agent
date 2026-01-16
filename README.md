@@ -1,163 +1,245 @@
-# MailMind
+<div align="center">
 
-An AI-powered email management assistant that combines advanced language models with practical email operations. MailMind helps you read, organize, draft, and manage emails through an intuitive chat interface.
+  # 📧 MailMind
 
-## Features
+  ### Your Email System Can Finally Do Its Job
 
-- **🤖 AI-Powered Email Assistant**: Interact with your emails using natural language
-- **📧 Full Email Management**: Read, compose, delete, move, and flag emails
-- **🔍 Smart Search**: Leverage web search capabilities for context-aware responses
-- **💾 Multi-Session Support**: Maintain multiple chat sessions with isolated contexts
-- **🔄 Real-Time Streaming**: Watch the AI think and respond in real-time
-- **📎 Attachment Handling**: View and download email attachments
-- **🎨 Modern Web Interface**: Clean, responsive UI built with React and TypeScript
-- **⚙️ Configurable Settings**: Easy-to-use settings page for all configurations
-- **🔔 Toast Notifications**: Beautiful notifications for errors and status updates
+  ![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)
+  ![Status](https://img.shields.io/badge/status-beta-orange.svg)
+  ![License](https://img.shields.io/badge/license-MIT-green.svg)
+  ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+  ![Node](https://img.shields.io/badge/node-18+-green.svg)
 
-## Architecture
+  **An AI-powered email management assistant that combines advanced language models with practical email operations.**
 
-MailMind is built on a modern tech stack:
+  MailMind helps you read, organize, draft, and manage emails through an intuitive chat interface.
 
-### Backend
-- **FastAPI**: High-performance async Python web framework
-- **LangGraph**: Advanced agent orchestration with stateful conversations
-- **LangChain**: Powerful framework for LLM applications
-- **WebSocket**: Real-time bidirectional communication
-- **IMAP/SMTP**: Direct email protocol integration
+  [Quick Start](#-quick-start) • [Features](#-features) • [Demo](#-demo) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
-### Frontend
-- **React 18**: Modern UI with hooks
-- **TypeScript**: Type-safe development
-- **Tailwind CSS**: Utility-first styling
-- **Vite**: Lightning-fast build tool
-- **Axios**: HTTP client with WebSocket support
+</div>
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 🤖 AI-Powered Assistant
+- Natural language interaction
+- Context-aware responses
+- Intelligent email drafting
+- Smart suggestions
+
+</td>
+<td width="50%">
+
+### 📧 Complete Email Management
+- Read, compose, send emails
+- Delete, move, flag messages
+- Handle attachments
+- Organize into folders
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔍 Smart Capabilities
+- Web search integration
+- Multi-session support
+- Real-time streaming
+- Attachment handling
+
+</td>
+<td width="50%">
+
+### ⚙️ Developer Friendly
+- Easy configuration
+- Extensible architecture
+- Modern tech stack
+- Type-safe codebase
+
+</td>
+</tr>
+</table>
+
+## 🏗️ Architecture
+
+### Backend Stack
+
+```
+FastAPI    → High-performance async web framework
+LangGraph  → Advanced agent orchestration
+WebSocket  → Real-time bidirectional communication
+IMAP/SMTP  → Direct email protocol integration
+```
+
+### Frontend Stack
+
+```
+React 18      → Modern UI with hooks
+TypeScript    → Type-safe development
+Tailwind CSS  → Utility-first styling
+Vite          → Lightning-fast build tool
+Axios         → HTTP & WebSocket client
+```
 
 ### AI Integration
-- Supports OpenAI-compatible APIs
-- Tavily search integration for web access
-- Subagent architecture for specialized tasks (email writing)
 
-## Quick Start
+- **OpenAI-Compatible APIs** - Support for multiple LLM providers
+- **Tavily Search** - Web search capabilities
+- **Subagent Architecture** - Specialized task handling
+- **Context Management** - Smart conversation tracking
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Node.js** 18+ and npm
 - **Python** 3.10+
-- An email account with IMAP access (Gmail recommended)
+- Email account with IMAP access (Gmail recommended)
 - API keys for your chosen LLM provider
 
 ### Installation
 
-1. **Clone the repository**:
+<details>
+<summary><b>1. Clone the repository</b></summary>
+
 ```bash
 git clone https://github.com/yourusername/mailmind.git
 cd mailmind
 ```
 
-2. **Configure environment variables**:
+</details>
+
+<details>
+<summary><b>2. Configure environment variables</b></summary>
+
 ```bash
+cd web_app
 cp .env.example .env
 # Edit .env with your API keys and email credentials
 ```
 
-3. **Start the application**:
+</details>
+
+<details>
+<summary><b>3. Start the application</b></summary>
+
 ```bash
-cd web_app
 ./start.sh
 ```
 
 The startup script will automatically:
-- Install Python dependencies in a virtual environment
-- Install Node.js dependencies
-- Start the backend server (default: http://localhost:2821)
-- Start the frontend dev server (default: http://localhost:2922)
+- ✅ Install Python dependencies in a virtual environment
+- ✅ Install Node.js dependencies
+- ✅ Start the backend server (default: http://localhost:2821)
+- ✅ Start the frontend dev server (default: http://localhost:2922)
 
-4. **Open your browser**:
-Navigate to the frontend URL (e.g., http://localhost:2922)
+</details>
 
-## Configuration
+<details>
+<summary><b>4. Open your browser</b></summary>
 
-Edit the `.env` file to configure:
+Navigate to `http://localhost:2922` and start managing your emails with AI!
+
+</details>
+
+## ⚙️ Configuration
 
 ### Model Settings
-- `MODEL`: Model name (e.g., `gpt-4`, `claude-3-sonnet`)
-- `OPENAI_API_KEY`: Your API key
-- `OPENAI_BASE_URL`: API endpoint URL
-- `DISPLAY_REASONING`: Show model's reasoning process
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `MODEL` | Model name | `gpt-4`, `claude-3-sonnet` |
+| `OPENAI_API_KEY` | Your API key | `sk-...` |
+| `OPENAI_BASE_URL` | API endpoint | `https://api.openai.com/v1` |
+| `DISPLAY_REASONING` | Show reasoning | `True`/`False` |
 
 ### Email Settings
-- `USERNAME`: Your email address
-- `PASSWORD`: App-specific password (recommended)
-- `IMAP_SERVER/SMTP_SERVER`: Email server addresses
-- `IMAP_PORT/SMTP_PORT`: Port numbers
-- `IMAP_USE_PROXY/SMTP_USE_PROXY`: Enable proxy if needed
-- `PROXY`: Proxy server URL (if required)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `USERNAME` | Your email address | - |
+| `PASSWORD` | App-specific password | - |
+| `IMAP_SERVER` | IMAP server address | `imap.gmail.com` |
+| `SMTP_SERVER` | SMTP server address | `smtp.gmail.com` |
+| `IMAP_PORT` | IMAP port | `993` |
+| `SMTP_PORT` | SMTP port | `465` |
 
 ### Network Settings
-- `BACKEND_PORT`: Backend server port (default: 2821)
-- `FRONTEND_PORT`: Frontend dev server port (default: 2922)
 
-## Usage
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BACKEND_PORT` | Backend server port | `2821` |
+| `FRONTEND_PORT` | Frontend dev server port | `2922` |
+
+## 💡 Usage
 
 ### Chat Interface
 
-1. **Start a Conversation**: Type your request in natural language
-   - "Read my unread emails"
-   - "Draft a reply to the latest email from John"
-   - "Delete all emails from newsletter@example.com"
+1. **Start a Conversation** - Type your request in natural language:
+   ```
+   "Read my unread emails"
+   "Draft a reply to the latest email from John"
+   "Delete all emails from newsletter@example.com"
+   ```
 
-2. **Watch the AI Work**: See the agent's thought process and tool calls in real-time
+2. **Watch the AI Work** - See the agent's thought process and tool calls in real-time
 
-3. **Manage Multiple Sessions**: Create new chat sessions for different tasks
+3. **Manage Multiple Sessions** - Create new chat sessions for different tasks
 
 ### Email Management
 
-The AI can perform these actions:
-- 📖 **Read**: Fetch and display emails with filtering
-- ✉️ **Send**: Compose and send new emails
-- 🗑️ **Delete**: Remove unwanted emails
-- 📁 **Move**: Organize emails into folders
-- 🏴 **Flag**: Mark emails as important/unread
-- 📎 **Attachments**: View and download attachments
+| Action | Description |
+|--------|-------------|
+| 📖 **Read** | Fetch and display emails with filtering |
+| ✉️ **Send** | Compose and send new emails |
+| 🗑️ **Delete** | Remove unwanted emails |
+| 📁 **Move** | Organize emails into folders |
+| 🏴 **Flag** | Mark as important/unread |
+| 📎 **Attachments** | View and download files |
 
 ### Settings Page
 
-Access settings through the web interface to:
-- Update API keys
-- Configure email servers
-- Adjust network ports
-- Toggle display options
+Configure everything through the web UI:
+- 🔑 Update API keys
+- 📧 Configure email servers
+- 🔌 Adjust network ports
+- 🎨 Toggle display options
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 mailmind/
-├── deepagents/           # Core agent framework
-│   ├── backends/        # Backend implementations (filesystem, etc.)
-│   ├── middleware/      # Agent middleware (skills, memory, etc.)
-│   └── ...             # Framework code
-├── lib/                 # Shared utilities
-│   ├── email_tools.py  # Email operations
-│   ├── prompt.py       # System prompts
-│   └── ...            # Helper modules
-├── web_app/            # Web application
-│   ├── backend/       # FastAPI server
+├── deepagents/              # Core agent framework
+│   ├── backends/           # Backend implementations
+│   ├── middleware/         # Agent middleware
+│   └── ...
+├── lib/                    # Shared utilities
+│   ├── email_tools.py     # Email operations
+│   ├── prompt.py          # System prompts
+│   └── ...
+├── web_app/               # Web application
+│   ├── backend/          # FastAPI server
 │   │   ├── api_server.py
 │   │   └── requirements.txt
-│   ├── frontend/      # React + TypeScript UI
+│   ├── frontend/         # React + TypeScript UI
 │   │   ├── src/
-│   │   │   ├── components/  # UI components
-│   │   │   ├── pages/       # Page components
-│   │   │   ├── lib/         # API & utilities
-│   │   │   └── contexts/    # React contexts
+│   │   │   ├── components/   # UI components
+│   │   │   ├── pages/        # Page components
+│   │   │   ├── lib/          # API & utilities
+│   │   │   └── contexts/     # React contexts
 │   │   ├── package.json
 │   │   └── vite.config.js
-│   └── start.sh      # Startup script
-├── .env.example       # Environment template
-└── README.md         # This file
+│   └── start.sh         # Startup script
+├── .env.example          # Environment template
+└── README.md            # This file
 ```
 
-## Development
+## 🛠️ Development
 
 ### Backend Development
 
@@ -176,89 +258,159 @@ npm run build   # Build for production
 npm run preview # Preview production build
 ```
 
-## Key Features Explained
+### Quick Development of Agent
+
+```bash
+python lib/test.py
+```
+
+## 🔑 Key Features Explained
 
 ### Session Isolation
 Each chat session maintains:
-- Separate agent instance with isolated state
-- Independent email cache
-- Dedicated filesystem for file operations
-- Unique conversation history
-
-### Email Cache Persistence
-- Email caches are persisted to `.emails_cache.json`
-- Survives server restarts
-- Automatically cleaned up when sessions are deleted
-- Session-isolated to prevent cross-contamination
+- ✅ Separate agent instance with isolated state
+- ✅ Independent email cache
+- ✅ Dedicated filesystem for file operations
+- ✅ Unique conversation history
 
 ### Real-Time Streaming
-- WebSocket connection for instant communication
-- Stream agent responses token-by-token
-- Display tool calls and results as they happen
-- Visual feedback for agent status
+- ✅ WebSocket connection for instant communication
+- ✅ Stream agent responses token-by-token
+- ✅ Display tool calls and results as they happen
+- ✅ Visual feedback for agent status
 
-### Toast Notifications
-- Beautiful, non-blocking notifications
-- Four types: success, error, info, warning
-- Auto-dismiss after 5 seconds
-- Manual dismiss with X button
+### Email Cache Persistence
+- ✅ Caches persisted to `.emails_cache.json`
+- ✅ Survives server restarts
+- ✅ Automatically cleaned up on session deletion
+- ✅ Session-isolated to prevent cross-contamination
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Email Connection Issues
-- Use an **App Password** instead of your regular password (especially for Gmail)
-- Enable **IMAP access** in your email settings
+
+<details>
+<summary><b>Gmail-specific issues</b></summary>
+
+- Use an **App Password** instead of your regular password
+- Enable **IMAP access** in Gmail settings
+- Check "Less secure app access" if applicable
+- Verify 2FA is enabled (required for App Passwords)
+
+</details>
+
+<details>
+<summary><b>General email issues</b></summary>
+
 - Check firewall/proxy settings if using a proxy
 - Verify IMAP/SMTP server addresses and ports
+- Ensure ports 993 (IMAP) and 465/587 (SMTP) are open
+- Test connection with `telnet imap.gmail.com 993`
+
+</details>
 
 ### API Errors
-- Verify your API key is valid and has sufficient credits
+
+<details>
+<summary><b>Common API issues</b></summary>
+
+- Verify API key is valid and has sufficient credits
 - Check that `OPENAI_BASE_URL` is correct for your provider
 - Some providers require specific model names
-- Check rate limits and quota
+- Check rate limits and quota usage
+- Review error messages in backend logs
+
+</details>
 
 ### WebSocket Connection
+
+<details>
+<summary><b>Connection problems</b></summary>
+
 - Ensure backend is running and accessible
 - Check port conflicts in `.env`
 - Verify browser console for errors
 - Try refreshing the page
+- Check network tab in browser DevTools
+
+</details>
 
 ### Performance Issues
+
+<details>
+<summary><b>Slow performance</b></summary>
+
 - Reduce email batch size in `read_emails` tool
 - Close unused chat sessions
 - Clear browser cache if UI is slow
-- Check system resources
+- Check system resources (CPU, memory)
+- Monitor network tab for large payloads
 
-## Security Considerations
+</details>
 
-- **Never commit** `.env` file to version control
-- Use **App Passwords** for email authentication
-- Keep API keys secure and rotate regularly
-- Be cautious with proxy configurations
-- The app runs locally; avoid exposing ports to the internet
+## 🔒 Security Considerations
 
-## License
+⚠️ **Important Security Notes**:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- ❌ **Never commit** `.env` file to version control
+- 🔑 Use **App Passwords** for email authentication
+- 🔄 Keep API keys secure and rotate regularly
+- ⚠️ Be cautious with proxy configurations
+- 🌐 The app runs locally; avoid exposing ports to the internet
+- 📁 Check `.gitignore` to ensure sensitive files are excluded
 
-## Contributing
+## 📝 TODO List
+
+- [ ] **Email Box** - Traditional email client interface
+- [ ] **User File Upload** - Upload files for AI chat
+- [ ] **Long-term Memory** - Store and retrieve conversation facts
+- [ ] **Advanced Search** - AI-powered categorization
+- [ ] **Multi-Account Support** - Multiple email accounts
+- [ ] **Email Analytics** - Statistics dashboard
+- [ ] **AI Summaries** - Thread summarization
+- [ ] **Calendar Integration** - Google Calendar & Outlook
+- [ ] **More LLM APIs** - Anthropic, Cohere, etc.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## Acknowledgments
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-- Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
-- UI powered by [React](https://react.dev/) and [Tailwind CSS](https://tailwindcss.com/)
-- Icons by [Lucide](https://lucide.dev/)
-- Email operations via [imap-tools](https://github.com/ikvk/imap_tools)
+## 🙏 Acknowledgments
 
-## Support
+Built with amazing open-source tools:
+
+- [DeepAgents](https://github.com/langchain-ai/deepagents) - Agent orchestration
+- [React](https://react.dev/) - UI framework
+- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [Lucide](https://lucide.dev/) - Icons
+- [imap-tools](https://github.com/ikvk/imap_tools) - Email operations
+- [FastAPI](https://fastapi.tiangolo.com/) - Backend framework
+
+## 💬 Support
 
 For issues and questions:
-- Open an issue on GitHub
-- Check existing documentation
-- Review troubleshooting section above
+
+- 🐛 [Report a bug](../../issues)
+- 💡 [Request a feature](../../issues)
+- 📖 Check existing documentation
+- 🔧 Review [troubleshooting section](#-troubleshooting)
 
 ---
 
-Made with ❤️ by the MailMind team
+<div align="center">
+
+  **Built with ❤️ by the MailMind team**
+
+  [⬆ Back to Top](#-mailmind)
+
+</div>

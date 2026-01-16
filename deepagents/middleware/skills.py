@@ -102,7 +102,7 @@ if TYPE_CHECKING:
     from deepagents.backends.protocol import BACKEND_TYPES, BackendProtocol
 
 from collections.abc import Awaitable, Callable
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 from langchain.agents.middleware.types import (
     AgentMiddleware,
@@ -152,7 +152,7 @@ class SkillMetadata(TypedDict):
 class SkillsState(AgentState):
     """State for the skills middleware."""
 
-    skills_metadata: NotRequired[Annotated[list[SkillMetadata], PrivateStateAttr]]
+    skills_metadata: Annotated[list[SkillMetadata] | None, PrivateStateAttr] = None
     """List of loaded skill metadata from all configured sources."""
 
 

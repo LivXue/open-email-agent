@@ -4,7 +4,7 @@
 import os
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Annotated, Literal, NotRequired, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from langchain.agents.middleware.types import (
     AgentMiddleware,
@@ -151,7 +151,7 @@ def _validate_path(path: str, *, allowed_prefixes: Sequence[str] | None = None) 
 class FilesystemState(AgentState):
     """State for the filesystem middleware."""
 
-    files: Annotated[NotRequired[dict[str, FileData]], _file_data_reducer]
+    files: Annotated[dict[str, FileData] | None, _file_data_reducer] = None
     """Files in the filesystem."""
 
 

@@ -1,4 +1,4 @@
-import { Send, User, Bot, ChevronDown, ChevronRight } from 'lucide-react';
+import { User, Bot, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import Markdown from 'markdown-to-jsx';
 import { useState } from 'react';
 
@@ -47,50 +47,85 @@ function CollapsibleSection({ title, icon, children, defaultOpen = false }: Coll
 
 interface ChatMessageProps {
   message: Message;
+  onDelete?: (messageId: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+// Content block types
+interface ContentBlock {
+  type: 'text' | 'reasoning' | 'tool_call' | 'tool_result';
+  content: string;
+  title?: string;
+}
+
+export function ChatMessage({ message, onDelete }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
-  // Parse content to extract special sections
-  const parseContent = (content: string) => {
-    const sections: Array<{ type: 'text' | 'reasoning' | 'tool_call' | 'tool_result'; content: string; title?: string }> = [];
-    let remainingContent = content;
+  // Parse content preserving original order
+  const parseContentPreservingOrder = (content: string): ContentBlock[] => {
+    const blocks: ContentBlock[] = [];
+    let remaining = content;
+    let pos = 0;
 
-    // Extract reasoning sections
-    const reasoningRegex = /\n💭\s*\*\*Reasoning\*\*:\n```\n([\s\S]*?)\n```/g;
-    let match;
-    while ((match = reasoningRegex.exec(content)) !== null) {
-      sections.push({ type: 'reasoning', content: match[1], title: 'Reasoning' });
-      remainingContent = remainingContent.replace(match[0], '');
+    while (pos < remaining.length) {
+      // Check for reasoning section: 💭 **Reasoning**:\n```\n...\n```\n
+      const reasoningMatch = remaining.slice(pos).match(/\n💭\s*\*\*Reasoning\*\*:\n```\n([\s\S]*?)\n```/);
+      if (reasoningMatch && reasoningMatch.index !== undefined) {
+        // Add any text before this match
+        const beforeText = remaining.slice(pos, pos + reasoningMatch.index).trim();
+        if (beforeText) {
+          blocks.push({ type: 'text', content: beforeText });
+        }
+        blocks.push({ type: 'reasoning', content: reasoningMatch[1], title: 'Reasoning' });
+        pos += reasoningMatch.index + reasoningMatch[0].length;
+        continue;
+      }
+
+      // Check for tool call section: 🔧 **Calling tool**: tool_name(args)\n
+      const toolCallMatch = remaining.slice(pos).match(/\n🔧\s*\*\*Calling tool\*\*:\s*(\w+)\((.*?)\)\n/);
+      if (toolCallMatch && toolCallMatch.index !== undefined) {
+        // Add any text before this match
+        const beforeText = remaining.slice(pos, pos + toolCallMatch.index).trim();
+        if (beforeText) {
+          blocks.push({ type: 'text', content: beforeText });
+        }
+        blocks.push({ type: 'tool_call', content: toolCallMatch[2], title: `Tool: ${toolCallMatch[1]}` });
+        pos += toolCallMatch.index + toolCallMatch[0].length;
+        continue;
+      }
+
+      // Check for tool result section: ✅ **Tool result**: tool_name\n```\n...\n```\n
+      const toolResultMatch = remaining.slice(pos).match(/\n✅\s*\*\*Tool result\*\*:\s*(\w+)\n```\n([\s\S]*?)\n```/);
+      if (toolResultMatch && toolResultMatch.index !== undefined) {
+        // Add any text before this match
+        const beforeText = remaining.slice(pos, pos + toolResultMatch.index).trim();
+        if (beforeText) {
+          blocks.push({ type: 'text', content: beforeText });
+        }
+        blocks.push({ type: 'tool_result', content: toolResultMatch[2], title: `Result: ${toolResultMatch[1]}` });
+        pos += toolResultMatch.index + toolResultMatch[0].length;
+        continue;
+      }
+
+      // No more special sections found, add remaining text
+      const remainingText = remaining.slice(pos).trim();
+      if (remainingText) {
+        blocks.push({ type: 'text', content: remainingText });
+      }
+      break;
     }
 
-    // Extract tool call sections
-    const toolCallRegex = /\n🔧\s*\*\*Calling tool\*\*:\s*(\w+)\((.*?)\)\n/g;
-    while ((match = toolCallRegex.exec(content)) !== null) {
-      sections.push({ type: 'tool_call', content: match[2], title: `Tool: ${match[1]}` });
-      remainingContent = remainingContent.replace(match[0], '');
-    }
-
-    // Extract tool result sections
-    const toolResultRegex = /\n✅\s*\*\*Tool result\*\*:\s*(\w+)\n```\n([\s\S]*?)\n```/g;
-    while ((match = toolResultRegex.exec(content)) !== null) {
-      sections.push({ type: 'tool_result', content: match[2], title: `Result: ${match[1]}` });
-      remainingContent = remainingContent.replace(match[0], '');
-    }
-
-    // Add remaining text content
-    if (remainingContent.trim()) {
-      sections.push({ type: 'text', content: remainingContent.trim() });
-    }
-
-    return sections;
+    return blocks;
   };
 
-  const sections = parseContent(message.content);
+  const sections = parseContentPreservingOrder(message.content);
 
-  return (
-    <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+  // Check if content already has tool calls/results (formatted text)
+  const hasFormattedToolCalls = sections.some(
+    s => s.type === 'tool_call' || s.type === 'tool_result'
+  );
+
+ return (
+    <div className={`flex w-full gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
           <Bot className="w-5 h-5 text-primary-700" />
@@ -98,7 +133,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       )}
 
       <div
-        className={`max-w-[70%] rounded-lg px-4 py-3 ${
+        className={`max-w-2xl rounded-lg px-4 py-3 ${
           isUser
             ? 'bg-primary-600 text-white'
             : 'bg-white border border-gray-200 text-gray-900'
@@ -141,7 +176,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
         </div>
 
-        {message.toolCalls && message.toolCalls.length > 0 && (
+        {/* Only show toolCalls array if content doesn't already have formatted tool calls */}
+        {!hasFormattedToolCalls && message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mt-3 space-y-2">
             {message.toolCalls.map((toolCall, index) => (
               <div
@@ -165,11 +201,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
         )}
 
         <div
-          className={`text-xs mt-2 ${
+          className={`text-xs mt-2 flex items-center gap-2 ${
             isUser ? 'text-primary-200' : 'text-gray-500'
           }`}
         >
-          {message.timestamp.toLocaleTimeString()}
+          <span>{message.timestamp.toLocaleTimeString()}</span>
+          {isUser && onDelete && (
+            <button
+              onClick={() => onDelete(message.id)}
+              className="opacity-60 hover:opacity-100 transition-opacity flex items-center gap-1"
+              title="Delete this message and all subsequent messages"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 

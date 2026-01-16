@@ -4,6 +4,7 @@ import ssl
 import warnings
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
+from contextvars import ContextVar
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,6 +13,13 @@ from imap_tools import AND, OR, MailboxLoginError
 from langchain_core.tools import tool
 
 from lib.email_utils import MailBoxClient, SMTPProxyClient
+
+# Context variable to store the current chat session ID
+# This allows each chat session to have its own isolated email cache
+chat_session_id_ctx: ContextVar[str] = ContextVar('chat_session_id', default='default')
+
+# Cache storage file path for persistence
+EMAILS_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', '.emails_cache.json')
 
 email = os.getenv("USERNAME")
 password = os.getenv("PASSWORD")
@@ -45,10 +53,104 @@ def init_email():
     except Exception as e:
         warnings.warn(f"Login to SMTP server failed: {e}\nPlease check your SMTP setting.\nEmail sending will be unavailable.")
         smtp_client = None
-init_email()
 
-# Cache to save recently fetched emails
-emails_cache = []
+# NOTE: init_email() is now called lazily by the API server during startup
+# This prevents blocking the server if email connections take time
+
+# Cache to save recently fetched emails - now isolated per chat session
+# Key: chat_session_id (str), Value: list of email objects
+_emails_caches: dict[str, list] = {}
+
+
+def _serialize_email_cache(emails: list) -> list:
+    """Serialize email objects to dict for JSON storage."""
+    serialized = []
+    for email in emails:
+        if email is None:
+            serialized.append(None)
+        else:
+            # Extract essential email information
+            serialized.append({
+                'uid': email.uid,
+                'subject': getattr(email, 'subject', ''),
+                'from': str(getattr(email, 'from_', '')),
+                'date': str(getattr(email, 'date_str', '')),
+                'flags': getattr(email, 'flags', set()),
+            })
+    return serialized
+
+
+def _deserialize_email_cache(data: list) -> list:
+    """Deserialize dict to email cache markers.
+    Note: We can't reconstruct full email objects, so we store metadata only.
+    The cache will be marked as stale and will require refresh on first access.
+    """
+    # Return list of None placeholders to indicate cache needs refresh
+    return [None] * len(data)
+
+
+def load_emails_cache_from_disk():
+    """Load emails cache from disk on startup."""
+    global _emails_caches
+    try:
+        if os.path.exists(EMAILS_CACHE_FILE):
+            with open(EMAILS_CACHE_FILE, 'r') as f:
+                data = json.load(f)
+                # Convert JSON data back to cache format
+                for session_id, cache_data in data.items():
+                    # Mark cache as stale (needs refresh) by using None placeholders
+                    _emails_caches[session_id] = _deserialize_email_cache(cache_data)
+                print(f"Loaded email caches for {len(_emails_caches)} sessions from disk")
+    except Exception as e:
+        print(f"Warning: Failed to load email caches from disk: {e}")
+        _emails_caches = {}
+
+
+def save_emails_cache_to_disk():
+    """Save emails cache to disk."""
+    try:
+        # Serialize all caches
+        data = {}
+        for session_id, emails in _emails_caches.items():
+            data[session_id] = _serialize_email_cache(emails)
+
+        # Write to file
+        with open(EMAILS_CACHE_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        print(f"Saved email caches for {len(data)} sessions to disk")
+    except Exception as e:
+        print(f"Warning: Failed to save email caches to disk: {e}")
+
+
+def get_emails_cache(chat_session_id: str = "default") -> list:
+    """Get the emails cache for a specific chat session."""
+    if chat_session_id not in _emails_caches:
+        _emails_caches[chat_session_id] = []
+    return _emails_caches[chat_session_id]
+
+
+def set_emails_cache(chat_session_id: str, emails: list):
+    """Set the emails cache for a specific chat session and persist to disk."""
+    _emails_caches[chat_session_id] = emails
+    # Auto-save after updating cache
+    save_emails_cache_to_disk()
+
+
+def clear_emails_cache(chat_session_id: str):
+    """Clear the emails cache for a specific chat session and update disk."""
+    if chat_session_id in _emails_caches:
+        del _emails_caches[chat_session_id]
+        # Auto-save after clearing cache
+        save_emails_cache_to_disk()
+
+
+def get_current_emails_cache() -> list:
+    """Get the emails cache for the current chat session (from context)."""
+    session_id = chat_session_id_ctx.get()
+    return get_emails_cache(session_id)
+
+# Backward compatibility: use default session if no session_id provided
+emails_cache = []  # Deprecated: Use get_emails_cache(session_id) instead
 
 @tool
 def email_dashboard():
@@ -176,11 +278,13 @@ def read_emails(
     else:
         emails = list(mailbox.fetch(limit=num_emails, mark_seen=not dont_set_read))
 
-    global emails_cache
-    emails_cache = []
+    # Get or create cache for current chat session
+    session_id = chat_session_id_ctx.get()
+    cache = get_emails_cache(session_id)
+    set_emails_cache(session_id, [])  # Clear cache for this session
     email_info = []
     for idx, email in enumerate(emails, 1):
-        emails_cache.append(email)
+        cache.append(email)
         subject = getattr(email, 'subject', '(No Subject)')
         if hasattr(email, 'from_values'):
             sender = getattr(email.from_values, 'full', getattr(email.from_values, 'email', '(Unknown Sender)'))
@@ -302,24 +406,27 @@ def delete_email(email_index: Optional[int] = None, email_uid: Optional[str] = N
     if not mailbox:
         return "Error: Mailbox not connected."
 
-    if email_index is not None and (email_index < 1 or email_index > len(emails_cache)):
-        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(emails_cache)}."
+    # Get cache for current session
+    cache = get_current_emails_cache()
+
+    if email_index is not None and (email_index < 1 or email_index > len(cache)):
+        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     try:
         if email_index is not None:
-            email_to_delete = emails_cache[email_index - 1]
+            email_to_delete = cache[email_index - 1]
             if email_to_delete is None:
                 return f"Error: Email #{email_index} has already been deleted. "
             email_uid = email_to_delete.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(emails_cache, 1) if email is not None and email.uid == email_uid), None)
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found. The email may have already been deleted."
         else:
             return "Error: Either email_index or email_uid must be provided."
 
         mailbox.delete(email_uid)
-        emails_cache[email_index - 1] = None
+        cache[email_index - 1] = None
 
         return f"Email #{email_index} deleted successfully!"
 
@@ -346,8 +453,11 @@ def move_email(
     if not mailbox:
         return "Error: Mailbox not connected."
 
-    if email_index is not None and (email_index < 1 or email_index > len(emails_cache)):
-        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(emails_cache)}."
+    # Get cache for current session
+    cache = get_current_emails_cache()
+
+    if email_index is not None and (email_index < 1 or email_index > len(cache)):
+        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     if not destination_folder:
         return "Error: destination_folder must be provided."
@@ -364,12 +474,12 @@ def move_email(
                 return f"Error: Folder '{destination_folder}' not found. Available folders: {', '.join(all_folders)}"
 
         if email_index is not None:
-            email_to_move = emails_cache[email_index - 1]
+            email_to_move = cache[email_index - 1]
             if email_to_move is None:
                 return f"Error: Email #{email_index} has already been deleted."
             email_uid = email_to_move.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(emails_cache, 1) if email is not None and email.uid == email_uid), None)
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found in cache."
         else:
@@ -377,7 +487,7 @@ def move_email(
 
         # Move the email
         mailbox.move(email_uid, destination_folder)
-        emails_cache[email_index - 1] = None
+        cache[email_index - 1] = None
 
         return f"Email #{email_index} moved successfully to '{destination_folder}'!"
 
@@ -416,17 +526,20 @@ def flag_email(
     if not mailbox:
         return "Error: Mailbox not connected."
 
-    if email_index is not None and (email_index < 1 or email_index > len(emails_cache)):
-        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(emails_cache)}."
+    # Get cache for current session
+    cache = get_current_emails_cache()
+
+    if email_index is not None and (email_index < 1 or email_index > len(cache)):
+        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     try:
         if email_index is not None:
-            email_to_flag = emails_cache[email_index - 1]
+            email_to_flag = cache[email_index - 1]
             if email_to_flag is None:
                 return f"Error: Email #{email_index} has already been deleted."
             email_uid = email_to_flag.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(emails_cache, 1) if email is not None and email.uid == email_uid), None)
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found in cache."
         else:
@@ -509,20 +622,23 @@ def download_attachments(
     if not mailbox:
         return "Error: Mailbox not connected."
 
-    if email_index is not None and (email_index < 1 or email_index > len(emails_cache)):
-        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(emails_cache)}."
+    # Get cache for current session
+    cache = get_current_emails_cache()
+
+    if email_index is not None and (email_index < 1 or email_index > len(cache)):
+        return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     try:
         if email_index is not None:
-            email_obj = emails_cache[email_index - 1]
+            email_obj = cache[email_index - 1]
             if email_obj is None:
                 return f"Error: Email #{email_index} has already been deleted."
             email_uid = email_obj.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(emails_cache, 1) if email is not None and email.uid == email_uid), None)
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found in cache."
-            email_obj = emails_cache[email_index - 1]
+            email_obj = cache[email_index - 1]
         else:
             return "Error: Either email_index or email_uid must be provided."
 
@@ -552,22 +668,26 @@ def download_attachments(
     except Exception as e:
         return f"Failed to download attachments from email #{email_index}: {str(e)}"
 
+def get_current_time_str():
+    """Get current time string in format 'YYYY-MM-DD HH:MM:SS'."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 address_book_data = {}
 def load_address_book():
     global address_book_data
-    # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
     address_book_path = os.path.join(script_dir, "address_book.json")
     with open(address_book_path, "r") as f:
         address_book_data = json.load(f)
 
-# Load the address book when the module is imported
 load_address_book()
 
-def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[str]=None, emails: Optional[str]=None, groups: Optional[str]=None):
-    """Modify the address book.
-    
+def _modify_address_book_impl(operation: str, id: Optional[str]=None, name: Optional[str]=None, emails: Optional[str]=None, groups: Optional[str]=None):
+    """Internal implementation of address book modification (non-tool version).
+
+    This function can be called directly from API endpoints. The @tool decorator
+    is applied separately for AI Agent usage.
+
     Args:
         operation (str): The operation to perform. Options: add_people, delete_people, add_emails, delete_emails, add_groups, delete_groups, edit_name.
         id (str, optional): The ID of the entry to modify. Defaults to None.
@@ -576,13 +696,13 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         groups (List[str], optional): A list of groups to add or delete the person from. Defaults to None.
 
     Examples:
-        modify_address_book("add_people", name="Musk", emails=["musk@outlook.com"], groups=["Important"])
-        modify_address_book("delete_people", id="12")
-        modify_address_book("add_emails", id="12", emails=["musk@gmail.com"])
-        modify_address_book("delete_emails", id="12", emails=["musk@outlook.com"])
-        modify_address_book("add_groups", id="12", groups=["Family"])
-        modify_address_book("delete_groups", id="12", groups=["Important"])
-        modify_address_book("edit_name", id="12", name="Elon Musk")
+        _modify_address_book_impl("add_people", name="Musk", emails=["musk@outlook.com"], groups=["Important"])
+        _modify_address_book_impl("delete_people", id="12")
+        _modify_address_book_impl("add_emails", id="12", emails=["musk@gmail.com"])
+        _modify_address_book_impl("delete_emails", id="12", emails=["musk@outlook.com"])
+        _modify_address_book_impl("add_groups", id="12", groups=["Family"])
+        _modify_address_book_impl("delete_groups", id="12", groups=["Important"])
+        _modify_address_book_impl("edit_name", id="12", name="Elon Musk")
     """
     if type(emails) == str:
         try:
@@ -595,22 +715,27 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         except json.JSONDecodeError:
             groups = groups.split(',')
 
+    result_message = ""
     if operation == "add_people":
         assert name, "Name is required for adding a person."
         if name in [v['name'] for v in address_book_data.values()]:
             return f"Error: Person with name {name} already exists."
         new_id = max(int(k) for k in address_book_data.keys()) + 1
+        current_time = get_current_time_str()
         address_book_data[str(new_id)] = {
             "id": str(new_id),
             "name": name,
             "emails": emails,
-            "groups": groups
+            "groups": groups,
+            "created_time": current_time,
+            "update_time": current_time
         }
+        result_message = f"Person {name} added successfully with ID {new_id}."
     elif operation == "delete_people":
         assert id, "ID is required for deleting a person."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
         del address_book_data[id]
-        return f"Person with ID {id} deleted successfully."
+        result_message = f"Person with ID {id} deleted successfully."
     elif operation == "add_emails":
         assert id, "ID is required for adding emails."
         assert emails, "Emails are required for adding emails."
@@ -618,7 +743,8 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         for email in emails:
             if email not in address_book_data[id].get("emails", []):
                 address_book_data[id].get("emails", []).append(email)
-        return f"Emails {emails} added to person with ID {id}."
+        address_book_data[id]["update_time"] = get_current_time_str()
+        result_message = f"Emails {emails} added to person with ID {id}."
     elif operation == "delete_emails":
         assert id, "ID is required for deleting emails."
         assert emails, "Emails are required for deleting emails."
@@ -626,7 +752,8 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         for email in emails:
             if email in address_book_data[id].get("emails", []):
                 address_book_data[id].get("emails", []).remove(email)
-        return f"Emails {emails} deleted from person with ID {id}."
+        address_book_data[id]["update_time"] = get_current_time_str()
+        result_message = f"Emails {emails} deleted from person with ID {id}."
     elif operation == "add_groups":
         assert id, "ID is required for adding groups."
         assert groups, "Groups are required for adding groups."
@@ -634,7 +761,8 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         for group in groups:
             if group not in address_book_data[id].get("groups", []):
                 address_book_data[id].get("groups", []).append(group)
-        return f"Groups {groups} added to person with ID {id}."
+        address_book_data[id]["update_time"] = get_current_time_str()
+        result_message = f"Groups {groups} added to person with ID {id}."
     elif operation == "delete_groups":
         assert id, "ID is required for deleting groups."
         assert groups, "Groups are required for deleting groups."
@@ -642,25 +770,30 @@ def modify_address_book(operation: str, id: Optional[str]=None, name: Optional[s
         for group in groups:
             if group in address_book_data[id].get("groups", []):
                 address_book_data[id].get("groups", []).remove(group)
-        return f"Groups {groups} deleted from person with ID {id}."
+        address_book_data[id]["update_time"] = get_current_time_str()
+        result_message = f"Groups {groups} deleted from person with ID {id}."
     elif operation == "edit_name":
         assert id, "ID is required for editing name."
         assert name, "Name is required for editing name."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
         address_book_data[id]["name"] = name
-        return f"Name of person with ID {id} updated to {name}."
+        address_book_data[id]["update_time"] = get_current_time_str()
+        result_message = f"Name of person with ID {id} updated to {name}."
     else:
         return f"Error: Invalid operation {operation}. Valid operations are 'add_people', 'delete_people', 'add_emails', 'delete_emails', 'add_groups', 'delete_groups', 'edit_name'."
 
-    # Save changes to file
+    # Save changes to file (this now executes for all operations)
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         address_book_path = os.path.join(script_dir, "address_book.json")
         with open(address_book_path, "w") as f:
-            json.dump(address_book_data, f, indent=2)
-        return f"Address book updated successfully."
+            json.dump(address_book_data, f, indent=2, ensure_ascii=False)
+        return result_message
     except Exception as e:
         return f"Error saving address book: {str(e)}"
+
+# Apply @tool decorator to create the tool version for AI Agents
+modify_address_book = tool(_modify_address_book_impl)
 
 @tool
 def search_address_book(
@@ -668,7 +801,7 @@ def search_address_book(
     email: Optional[str] = None,
     group: Optional[str] = None,
 ):
-    """Search the address book for people using one of the search criteria (name, email, or group).
+    """Search the address book for people using one of the search criteria (name, email, or group). Return all people's information if no criteria is provided.
     
     Args:
         name (str, optional): The name of the person to search for. Defaults to None.
@@ -676,10 +809,12 @@ def search_address_book(
         group (str, optional): The group to search in. Defaults to None.
         
     Returns:
-        str: A formatted string containing the person's name and email address if found, or a message indicating no match.
+        str: A formatted string containing the person's name, email address, and groups.
     """
     if name is None and email is None and group is None:
-        return "Please provide at least one search criterion (name, email, or group)."
+        infos = address_book_data.values()
+        assert len(infos) > 0, "Error: Address book is empty."
+        return '\n'.join(json.dumps(info, ensure_ascii=False) for info in infos)
 
     if name is not None:
         infos = [v for v in address_book_data.values() if v['name'] == name]

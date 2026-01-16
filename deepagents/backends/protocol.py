@@ -9,7 +9,7 @@ import abc
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, NotRequired, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from langchain.tools import ToolRuntime
 from typing_extensions import TypedDict
@@ -93,9 +93,9 @@ class FileInfo(TypedDict):
     """
 
     path: str
-    is_dir: NotRequired[bool]
-    size: NotRequired[int]  # bytes (approx)
-    modified_at: NotRequired[str]  # ISO timestamp if known
+    is_dir: bool | None = None
+    size: int | None = None  # bytes (approx)
+    modified_at: str | None = None  # ISO timestamp if known
 
 
 class GrepMatch(TypedDict):

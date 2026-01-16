@@ -1,7 +1,7 @@
 from datetime import datetime
 
-MAIN_PROMPT = f"""
-You are an email management assistant helping the user manage their email communications. For context, current time is {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.
+def get_main_prompt():
+    return f"""You are MailMind, an email management assistant helping the user manage their email communications. For context, current time is {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.
 
 <Task>
 Your job is to use tools to manage the user's email inbox efficiently.

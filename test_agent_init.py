@@ -14,7 +14,7 @@ from langchain_qwq import ChatQwQ
 from tavily import TavilyClient
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
-from lib.prompt import MAIN_PROMPT
+from lib.prompt import get_main_prompt
 from lib import email_tools
 from lib.email_tools import (
     email_dashboard, read_emails, send_email, delete_email,
@@ -60,7 +60,7 @@ tools = {
 try:
     agent = create_deep_agent(
         model=chat_model,
-        system_prompt=MAIN_PROMPT,
+        system_prompt=get_main_prompt(),
         tools=[internet_search] + list(tools.values()),
         subagents=[email_writer_subagent],
         backend=FilesystemBackend(root_dir='/data/xuedizhan/deepagents/tmp'),

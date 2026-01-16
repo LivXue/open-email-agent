@@ -20,6 +20,8 @@ export function SettingsPage() {
     SMTP_USE_PROXY: false,
     DONT_SET_READ: true,
     PROXY: '',
+    BACKEND_PORT: 8001,
+    FRONTEND_PORT: 3001,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -329,6 +331,46 @@ export function SettingsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                 />
                 <p className="text-xs text-gray-500 mt-1">Format: http://username:password@host:port</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Network Settings */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Network Settings</h3>
+            <p className="text-sm text-gray-600 mb-4">Configure the ports for the backend and frontend servers. Changes will take effect after restarting the application.</p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Backend Port
+                </label>
+                <input
+                  type="number"
+                  value={settings.BACKEND_PORT}
+                  onChange={(e) => handleChange('BACKEND_PORT', parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                  required
+                  min={1024}
+                  max={65535}
+                />
+                <p className="text-xs text-gray-500 mt-1">Port for the backend API server</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Frontend Port
+                </label>
+                <input
+                  type="number"
+                  value={settings.FRONTEND_PORT}
+                  onChange={(e) => handleChange('FRONTEND_PORT', parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                  required
+                  min={1024}
+                  max={65535}
+                />
+                <p className="text-xs text-gray-500 mt-1">Port for the frontend development server</p>
               </div>
             </div>
           </div>
