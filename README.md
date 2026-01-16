@@ -14,7 +14,7 @@
 
   MailMind helps you read, organize, draft, and manage emails through an intuitive chat interface.
 
-  [Quick Start](#-quick-start) • [Features](#-features) • [Demo](#-demo) • [Documentation](#-documentation) • [Contributing](#-contributing)
+  [Quick Start](#-quick-start) • [Features](#-features) • [Contacts](#-contacts-management) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
 </div>
 
@@ -24,7 +24,7 @@
 
 <table>
 <tr>
-<td width="50%">
+<td width="33%">
 
 ### 🤖 AI-Powered Assistant
 - Natural language interaction
@@ -33,7 +33,7 @@
 - Smart suggestions
 
 </td>
-<td width="50%">
+<td width="33%">
 
 ### 📧 Complete Email Management
 - Read, compose, send emails
@@ -44,7 +44,16 @@
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td width="33%">
+
+### 👥 Contacts Management
+- Create and edit contacts
+- Organize into custom groups
+- Multi-email per contact
+- Powerful search and filtering
+
+</td>
+<td width="33%">
 
 ### 🔍 Smart Capabilities
 - Web search integration
@@ -53,13 +62,24 @@
 - Attachment handling
 
 </td>
-<td width="50%">
+</tr>
+<tr>
+<td width="33%">
 
 ### ⚙️ Developer Friendly
 - Easy configuration
 - Extensible architecture
 - Modern tech stack
 - Type-safe codebase
+
+</td>
+<td width="33%">
+
+### 🎨 Beautiful UI
+- Modern, responsive design
+- Intuitive navigation
+- Toast notifications
+- Dark mode ready
 
 </td>
 </tr>
@@ -202,6 +222,25 @@ Navigate to `http://localhost:2922` and start managing your emails with AI!
 | 🏴 **Flag** | Mark as important/unread |
 | 📎 **Attachments** | View and download files |
 
+### Contacts Management
+
+Organize your contacts efficiently with our comprehensive contacts feature:
+
+| Feature | Description |
+|---------|-------------|
+| 👤 **Add Contacts** | Create new contacts with multiple email addresses |
+| ✏️ **Edit Contacts** | Update contact information anytime |
+| 🗑️ **Delete Contacts** | Remove contacts with confirmation |
+| 🏷️ **Groups** | Organize contacts into custom groups |
+| 🔍 **Search** | Find contacts by name, email, or group |
+| 📋 **Alphabetical View** | Contacts automatically sorted by first letter |
+
+**Benefits**:
+- 📧 Quick access when composing emails
+- 🎯 Filter emails by contacts
+- 👥 Organize contacts into groups (Family, Work, Friends, etc.)
+- 🔎 Search across all contact fields instantly
+
 ### Settings Page
 
 Configure everything through the web UI:
@@ -209,6 +248,35 @@ Configure everything through the web UI:
 - 📧 Configure email servers
 - 🔌 Adjust network ports
 - 🎨 Toggle display options
+
+### Contacts Page
+
+Manage your network of contacts efficiently:
+
+**Adding Contacts**:
+1. Click the **"Add Contact"** button
+2. Enter contact name (required)
+3. Add one or more email addresses
+4. Assign to groups (e.g., Family, Work, Friends)
+5. Save the contact
+
+**Organizing with Groups**:
+- Create custom groups to categorize contacts
+- Filter contacts by group in the sidebar
+- Groups show contact counts
+- Easily add/remove contacts from groups
+
+**Searching Contacts**:
+- Search by name, email, or group
+- Real-time filtering as you type
+- Alphabetically sorted display
+- Quick access to contact details
+
+**Managing Contacts**:
+- ✏️ Edit any contact to update information
+- 🗑️ Delete with confirmation dialog
+- 📧 Multiple email addresses per contact
+- 🏷️ Visual group tags on each contact
 
 ## 📁 Project Structure
 
