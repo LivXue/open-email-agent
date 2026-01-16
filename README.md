@@ -24,7 +24,7 @@
 
 <table>
 <tr>
-<td width="33%">
+<td width="50%">
 
 ### 🤖 AI-Powered Assistant
 - Natural language interaction
@@ -33,7 +33,7 @@
 - Smart suggestions
 
 </td>
-<td width="33%">
+<td width="50%">
 
 ### 📧 Complete Email Management
 - Read, compose, send emails
@@ -44,7 +44,7 @@
 </td>
 </tr>
 <tr>
-<td width="33%">
+<td width="50%">
 
 ### 👥 Contacts Management
 - Create and edit contacts
@@ -53,7 +53,7 @@
 - Powerful search and filtering
 
 </td>
-<td width="33%">
+<td width="50%">
 
 ### 🔍 Smart Capabilities
 - Web search integration
@@ -64,7 +64,7 @@
 </td>
 </tr>
 <tr>
-<td width="33%">
+<td width="50%">
 
 ### ⚙️ Developer Friendly
 - Easy configuration
@@ -73,7 +73,7 @@
 - Type-safe codebase
 
 </td>
-<td width="33%">
+<td width="50%">
 
 ### 🎨 Beautiful UI
 - Modern, responsive design
@@ -188,6 +188,46 @@ Navigate to `http://localhost:2922` and start managing your emails with AI!
 | `SMTP_SERVER` | SMTP server address | `smtp.gmail.com` |
 | `IMAP_PORT` | IMAP port | `993` |
 | `SMTP_PORT` | SMTP port | `465` |
+
+### Tested Email Providers
+
+| Provider | Status | Notes |
+|----------|--------|-------|
+| ✅ **Gmail** | Fully Tested & Supported | Requires App Password. Enable IMAP in settings. |
+| 🔄 **Outlook** | In Testing | Very complicated access through IMAP and SMTP protocols. |
+
+
+<details>
+<summary><b>Gmail Setup Guide (Recommended)</b></summary>
+
+1. **Enable 2-Factor Authentication**
+   - Go to Google Account settings
+   - Security → 2-Step Verification
+   - Enable 2FA
+
+2. **Generate App Password**
+   - Go to Google Account settings
+   - Security → App passwords
+   - Generate new app password
+   - Use this password in `PASSWORD` field
+
+3. **Enable IMAP Access**
+   - Go to Gmail settings
+   - Forwarding and POP/IMAP
+   - Enable IMAP
+   - Save changes
+
+4. **Configure MailMind**
+   ```
+   USERNAME=yourname@gmail.com
+   PASSWORD=[your 16-character app password]
+   IMAP_SERVER=imap.gmail.com
+   SMTP_SERVER=smtp.gmail.com
+   IMAP_PORT=993
+   SMTP_PORT=465
+   ```
+
+</details>
 
 ### Network Settings
 
