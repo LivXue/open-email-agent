@@ -222,3 +222,16 @@ libs/deepagents-cli/TEXTUAL_PROGRESS.md
 .env
 web_app/.env
 web_app/backend/venv/
+
+# Email cache persistence
+.emails_cache.json
+
+# Agent filesystem
+agent_fs/
+
+# Project-specific
+tmp/
+
+# Documentation (keep main README)
+*.md
+!README.md
