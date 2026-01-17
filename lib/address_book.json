@@ -1,16 +1,4 @@
 {
-  "0": {
-    "name": "薛迪展",
-    "emails": [
-      "xuedizhan17@mails.ucas.ac.cn"
-    ],
-    "groups": [
-      "student"
-    ],
-    "created_time": "2024-01-01 12:00:00",
-    "update_time": "2024-01-01 12:00:00",
-    "id": "0"
-  },
   "1": {
     "id": "1",
     "name": "测试用户（更新）",
