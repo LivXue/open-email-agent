@@ -10,11 +10,11 @@
   ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
   ![Node](https://img.shields.io/badge/node-18+-green.svg)
 
-  **An AI-powered email management assistant that combines advanced language models with practical email operations.**
+  **An AI-powered email agent that combines large language models with modern email system.**
 
   MailMind helps you read, organize, draft, and manage emails through an intuitive chat interface.
 
-  [Quick Start](#-quick-start) • [Features](#-features) • [Contacts](#-contacts-management) • [Documentation](#-documentation) • [Contributing](#-contributing)
+  [Quick Start](#-quick-start) • [Features](#-features) • [Contacts](#-contacts-management) • [Documentation](#-documentation) • [Contributing](#-contributing) • [中文文档](README_CN.md)
 
 </div>
 

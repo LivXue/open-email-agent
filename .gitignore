@@ -231,7 +231,3 @@ agent_fs/
 
 # Project-specific
 tmp/
-
-# Documentation (keep main README)
-*.md
-!README.md
