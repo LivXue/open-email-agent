@@ -12,6 +12,8 @@
 
   **An AI-powered email agent that combines large language models with modern email system.**
 
+  ![Main Interface](pics/main_interface.png)
+
   MailMind helps you read, organize, draft, and manage emails through an intuitive chat interface.
 
   [Quick Start](#-quick-start) • [Features](#-features) • [Contacts](#-contacts-management) • [Documentation](#-documentation) • [Contributing](#-contributing) • [中文文档](README_CN.md)
