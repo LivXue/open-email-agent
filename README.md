@@ -20,11 +20,15 @@
 
 ---
 
+<div align="center">
+
 ## 🎉 What's New in v0.0.2
 
-### ✨ **Emails Page - Complete Overhaul**
+### ✨ Emails Page - Complete Overhaul
 
 We've completely redesigned the Emails page with a modern, feature-rich email client interface.
+
+</div>
 
 ---
 
@@ -32,7 +36,7 @@ We've completely redesigned the Emails page with a modern, feature-rich email cl
 
 <table>
 <tr>
-<td width="50%">
+<td>
 
 ### 🤖 AI-Powered Email Agent
 - Natural language interaction
@@ -41,7 +45,7 @@ We've completely redesigned the Emails page with a modern, feature-rich email cl
 - Automated workflows with smart planning
 
 </td>
-<td width="50%">
+<td>
 
 ### 📧 Intelligent Email Box
 - Read, compose, send emails
@@ -52,7 +56,7 @@ We've completely redesigned the Emails page with a modern, feature-rich email cl
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td>
 
 ### 👥 AI-accessable Contacts
 - Create and edit contacts
@@ -61,7 +65,7 @@ We've completely redesigned the Emails page with a modern, feature-rich email cl
 - Powerful search and filtering
 
 </td>
-<td width="50%">
+<td>
 
 ### 🔍 Smart Capabilities
 - Web search integration
@@ -71,9 +75,7 @@ We've completely redesigned the Emails page with a modern, feature-rich email cl
 
 </td>
 </tr>
-<tr>
-<td width="50%">
-
+</table>
 
 ## 🏗️ Architecture
 
@@ -232,8 +234,8 @@ Navigate to `http://localhost:2922` and start managing your emails with AI!
 
 1. **Start a Conversation** - Type your request in natural language:
    ```
-   "Read my unread emails"
-   "Draft a reply to the latest email from John"
+   "Summarize my unread emails"
+   "Reply to all unread New Year greeting emails"
    "Delete all emails from newsletter@example.com"
    ```
 
