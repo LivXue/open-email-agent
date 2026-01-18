@@ -20,15 +20,11 @@
 
 ---
 
-<div align="center">
-
 ## 🎉 What's New in v0.0.2
 
-### ✨ Emails Page - Complete Overhaul
+### ✨ **Emails Page - Complete Overhaul**
 
 We've completely redesigned the Emails page with a modern, feature-rich email client interface.
-
-</div>
 
 ---
 
