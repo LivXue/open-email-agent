@@ -479,32 +479,39 @@ def move_email(
             else:
                 return f"Error: Folder '{destination_folder}' not found. Available folders: {', '.join(all_folders)}"
 
-        if email_index is not None:
-            email_to_move = cache[email_index - 1]
-            if email_to_move is None:
-                return f"Error: Email #{email_index} has already been deleted."
-            email_uid = email_to_move.uid
-        elif email_uid is not None:
-            # Convert email_uid to int for comparison with email.uid (which is an integer from imap_tools)
+        # Convert email_uid to int if provided
+        if email_uid is not None:
             try:
                 email_uid_int = int(email_uid)
             except (ValueError, TypeError):
                 return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
 
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid_int), None)
-            if email_index is None:
-                return f"Error: Email with UID {email_uid} not found in cache."
-        else:
+        if email_index is not None:
+            email_to_move = cache[email_index - 1]
+            if email_to_move is None:
+                return f"Error: Email #{email_index} has already been deleted."
+            email_uid_int = email_to_move.uid
+
+        # If email_uid is provided directly, use it without cache lookup
+        # If email_index is provided, email_uid_int is already set above
+        if email_uid_int is None:
             return "Error: Either email_index or email_uid must be provided."
 
         # Move the email
-        mailbox.move(email_uid, destination_folder)
-        cache[email_index - 1] = None
+        mailbox.move(email_uid_int, destination_folder)
 
-        return f"Email #{email_index} moved successfully to '{destination_folder}'!"
+        # Mark as deleted in cache if we have an index
+        if email_index is not None:
+            cache[email_index - 1] = None
+            return f"Email #{email_index} moved successfully to '{destination_folder}'!"
+        else:
+            return f"Email with UID {email_uid_int} moved successfully to '{destination_folder}'!"
 
     except Exception as e:
-        return f"Failed to move email #{email_index}: {str(e)}"
+        if email_index is not None:
+            return f"Failed to move email #{email_index}: {str(e)}"
+        else:
+            return f"Failed to move email with UID {email_uid_int}: {str(e)}"
 
 
 @tool
@@ -545,16 +552,22 @@ def flag_email(
         return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     try:
+        # Convert email_uid to int if provided as string
+        if email_uid is not None:
+            try:
+                email_uid_int = int(email_uid)
+            except (ValueError, TypeError):
+                return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
+
         if email_index is not None:
             email_to_flag = cache[email_index - 1]
             if email_to_flag is None:
                 return f"Error: Email #{email_index} has already been deleted."
-            email_uid = email_to_flag.uid
-        elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
-            if email_index is None:
-                return f"Error: Email with UID {email_uid} not found in cache."
-        else:
+            email_uid_int = email_to_flag.uid
+
+        # If email_uid is provided directly, use it without cache lookup
+        # If email_index is provided, email_uid_int is already set above
+        if email_uid_int is None:
             return "Error: Either email_index or email_uid must be provided."
 
         # Map flag_type to IMAP flag name
@@ -575,11 +588,19 @@ def flag_email(
             return f"Error: Invalid flag_type '{flag_type}'. Valid options: 'seen/read', 'flagged/important/starred', 'answered', 'draft'."
 
         # Set the flag
-        mailbox.flag.set([email_uid], imap_flag, value)
-        return f"Email #{email_index} {action_desc}!"
+        mailbox.flag.set([email_uid_int], imap_flag, value)
+
+        # Return success message
+        if email_index is not None:
+            return f"Email #{email_index} {action_desc}!"
+        else:
+            return f"Email with UID {email_uid_int} {action_desc}!"
 
     except Exception as e:
-        return f"Failed to set flag for email #{email_index}: {str(e)}"
+        if email_index is not None:
+            return f"Failed to set flag for email #{email_index}: {str(e)}"
+        else:
+            return f"Failed to set flag for email with UID {email_uid_int}: {str(e)}"
 
 
 @tool
@@ -641,16 +662,26 @@ def download_attachments(
         return f"Error: Invalid email index {email_index}. Valid range: 1-{len(cache)}."
 
     try:
+        # Convert email_uid to int if provided
+        if email_uid is not None:
+            try:
+                email_uid_int = int(email_uid)
+            except (ValueError, TypeError):
+                return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
+
         if email_index is not None:
             email_obj = cache[email_index - 1]
             if email_obj is None:
                 return f"Error: Email #{email_index} has already been deleted."
-            email_uid = email_obj.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
-            if email_index is None:
-                return f"Error: Email with UID {email_uid} not found in cache."
-            email_obj = cache[email_index - 1]
+            # If only email_uid is provided, fetch the email from server
+            # This is slower but necessary when email is not in cache
+            for msg in mailbox.fetch(criteria=Uid(email_uid_int)):
+                email_obj = msg
+                break
+            if email_obj is None:
+                return f"Error: Email with UID {email_uid} not found on server."
+            email_index = None  # No index available when fetching by UID
         else:
             return "Error: Either email_index or email_uid must be provided."
 
@@ -660,7 +691,10 @@ def download_attachments(
 
         # Get attachments from the email
         if not hasattr(email_obj, 'attachments') or len(email_obj.attachments) == 0:
-            return f"Email #{email_index} has no attachments."
+            if email_index is not None:
+                return f"Email #{email_index} has no attachments."
+            else:
+                return f"Email with UID {email_uid_int} has no attachments."
 
         downloaded_files = []
         for attachment in email_obj.attachments:
@@ -675,10 +709,16 @@ def download_attachments(
 
             downloaded_files.append(f"  - {filename} (saved to {filepath})")
 
-        return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email #{email_index}:\n" + "\n".join(downloaded_files)
+        if email_index is not None:
+            return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email #{email_index}:\n" + "\n".join(downloaded_files)
+        else:
+            return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email with UID {email_uid_int}:\n" + "\n".join(downloaded_files)
 
     except Exception as e:
-        return f"Failed to download attachments from email #{email_index}: {str(e)}"
+        if email_index is not None:
+            return f"Failed to download attachments from email #{email_index}: {str(e)}"
+        else:
+            return f"Failed to download attachments from email with UID {email_uid_int}: {str(e)}"
 
 def get_current_time_str():
     """Get current time string in format 'YYYY-MM-DD HH:MM:SS'."""

@@ -63,6 +63,57 @@ body {
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
+  /* ISOLATION: Prevent email styles from leaking to global */
+  all: initial;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  color: #1f2937 !important;
+  display: block;
+  box-sizing: border-box;
+  isolation: isolate;
+  contain: layout style;
+}
+
+/* Prevent style leakage from email HTML */
+.email-body-content style,
+.email-body-content script {
+  display: none !important;
+}
+
+/* Reset all child elements - FORCE font isolation */
+.email-body-content *,
+.email-body-content *::before,
+.email-body-content *::after {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
+  box-sizing: border-box;
+}
+
+/* Reset common elements that might have global styles */
+.email-body-content div,
+.email-body-content span,
+.email-body-content p,
+.email-body-content a,
+.email-body-content h1,
+.email-body-content h2,
+.email-body-content h3,
+.email-body-content h4,
+.email-body-content h5,
+.email-body-content h6,
+.email-body-content ul,
+.email-body-content ol,
+.email-body-content li,
+.email-body-content table,
+.email-body-content td,
+.email-body-content th {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
+  max-width: 100%;
+  font-size: inherit !important;
+}
+
+/* Protect global styles from email content */
+body {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
 }
 
 /* Email body typography */

@@ -63,7 +63,7 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-hidden min-h-0">
           {children}
         </main>
       </div>

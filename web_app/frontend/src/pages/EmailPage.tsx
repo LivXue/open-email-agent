@@ -27,6 +27,37 @@ import { useEmailContext, type EmailData, type FolderState } from '../contexts/E
 const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT || '2821';
 const API_BASE = `http://localhost:${BACKEND_PORT}`;
 
+/**
+ * Sanitize email HTML to prevent style leakage
+ * Removes style tags, script tags, and other potentially harmful elements
+ */
+function sanitizeEmailHtml(html: string): string {
+  // Create a temporary DOM element to parse HTML
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  // Remove style tags
+  const styleTags = temp.querySelectorAll('style');
+  styleTags.forEach(tag => tag.remove());
+
+  // Remove script tags
+  const scriptTags = temp.querySelectorAll('script');
+  scriptTags.forEach(tag => tag.remove());
+
+  // Remove link tags (stylesheets)
+  const linkTags = temp.querySelectorAll('link[rel="stylesheet"]');
+  linkTags.forEach(tag => tag.remove());
+
+  // Remove all style attributes from elements
+  const allElements = temp.querySelectorAll('*');
+  allElements.forEach(el => {
+    el.removeAttribute('style');
+    el.removeAttribute('class');
+  });
+
+  return temp.innerHTML;
+}
+
 type FilterType = 'all' | 'unread' | 'starred';
 type ComposeMode = 'reply' | 'forward' | 'compose';
 
@@ -337,9 +368,9 @@ export function EmailPage() {
   };
 
   return (
-    <div className="h-full flex bg-gray-50">
+    <div className="h-full flex overflow-hidden bg-gray-50">
       {/* Sidebar - Folders */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
         {/* Compose button */}
         <div className="p-4">
           <button
@@ -413,9 +444,9 @@ export function EmailPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900">
               {selectedFolder === '[Gmail]/Starred' && 'Starred'}
@@ -521,7 +552,7 @@ export function EmailPage() {
         </div>
 
         {/* Email list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {currentFolderState.loadStatus === 'loading' ? (
             // Skeleton loading
             <div className="p-6 space-y-4">
@@ -722,7 +753,7 @@ export function EmailPage() {
                       <div className="mb-4">
                         <div
                           className="email-body-content text-gray-800 bg-white p-4 rounded border border-gray-200"
-                          dangerouslySetInnerHTML={{ __html: email.body }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.body) }}
                         />
                       </div>
 
