@@ -2,9 +2,9 @@
 
   # 📧 MailMind
 
-  ### Your Email System Can Finally Do Its Job
+  ### Your Email System Can Finally Do Jobs For You!
 
-  ![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)
   ![Status](https://img.shields.io/badge/status-beta-orange.svg)
   ![License](https://img.shields.io/badge/license-MIT-green.svg)
   ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
@@ -20,36 +20,48 @@
 
 ---
 
+<div align="center">
+
+## 🎉 What's New in v0.0.2
+
+### ✨ Emails Page - Complete Overhaul
+
+We've completely redesigned the Emails page with a modern, feature-rich email client interface.
+
+</div>
+
+---
+
 ## ✨ Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 🤖 AI-Powered Assistant
+### 🤖 AI-Powered Email Agent
 - Natural language interaction
 - Context-aware responses
-- Intelligent email drafting
-- Smart suggestions
+- Intelligent email processing
+- Automated workflows with smart planning
 
 </td>
 <td width="50%">
 
-### 📧 Complete Email Management
+### 📧 Intelligent Email Box
 - Read, compose, send emails
-- Delete, move, flag messages
-- Handle attachments
-- Organize into folders
+- Organize emails by AI
+- Extract information by intuition
+- Generate communication flows
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-### 👥 Contacts Management
+### 👥 AI-accessable Contacts
 - Create and edit contacts
-- Organize into custom groups
-- Multi-email per contact
+- Automatically organize by AI
+- AI-understood social networks
 - Powerful search and filtering
 
 </td>
@@ -66,24 +78,6 @@
 <tr>
 <td width="50%">
 
-### ⚙️ Developer Friendly
-- Easy configuration
-- Extensible architecture
-- Modern tech stack
-- Type-safe codebase
-
-</td>
-<td width="50%">
-
-### 🎨 Beautiful UI
-- Modern, responsive design
-- Intuitive navigation
-- Toast notifications
-- Dark mode ready
-
-</td>
-</tr>
-</table>
 
 ## 🏗️ Architecture
 
@@ -469,7 +463,7 @@ Each chat session maintains:
 
 ## 📝 TODO List
 
-- [ ] **Email Box** - Traditional email client interface
+- [ ] **Email Box** - Intelligent email client interface
 - [ ] **User File Upload** - Upload files for AI chat
 - [ ] **Long-term Memory** - Store and retrieve conversation facts
 - [ ] **Advanced Search** - AI-powered categorization

@@ -11,7 +11,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from datetime import datetime, UTC
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -27,20 +27,21 @@ from deepagents.backends import FilesystemBackend
 from lib.prompt import get_main_prompt
 
 # Import email_tools module to ensure init_email() is called
+# We import individual tool functions for AI Agent usage
 import lib.email_tools as email_tools_module
 from lib.email_tools import (
-            email_dashboard,
-            read_emails,
-            send_email,
-            delete_email,
-            move_email,
-            flag_email,
-            list_folders,
-            search_address_book,
-            _modify_address_book_impl,
-            modify_address_book,
-            download_attachments
-        )
+    email_dashboard,
+    read_emails,
+    send_email,
+    delete_email,
+    move_email,
+    flag_email,
+    list_folders,
+    search_address_book,
+    _modify_address_book_impl,
+    modify_address_book,
+    download_attachments
+)
 
 
 # These will be imported lazily when needed
@@ -778,6 +779,780 @@ async def delete_session(session_id: str):
         import traceback
         error_detail = f"{str(e)}\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_detail)
+
+
+# ==================== Email Management APIs ====================
+
+@app.get("/api/emails/folders")
+async def get_email_folders():
+    """Get all available email folders from IMAP server using async implementation."""
+    try:
+        print("[DEBUG] /api/emails/folders - Starting folder fetch")
+
+        if not email_tools_module.mailbox:
+            print("[DEBUG] /api/emails/folders - Mailbox is None, attempting to initialize...")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, email_tools_module.init_email)
+            print("[DEBUG] /api/emails/folders - Mailbox initialized")
+
+        # Use the async fetch_folders function instead of synchronous call
+        folders = await fetch_folders_async(email_tools_module.mailbox)
+        print(f"[DEBUG] /api/emails/folders - Returning {len(folders)} selectable folders")
+
+        return {
+            "status": "success",
+            "folders": folders,
+            "total": len(folders)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] /api/emails/folders - Exception: {e}")
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.get("/api/emails")
+async def get_emails(
+    folder: str = "INBOX",
+    limit: int = 50,
+    unread_only: bool = False
+):
+    """Get emails from a specific folder using standalone async implementation.
+
+    This endpoint does NOT use read_emails or email_tools cache.
+    It uses the same async implementation as the WebSocket endpoint.
+    """
+    try:
+        print(f"[DEBUG] /api/emails - Fetching emails from folder: {folder}, limit: {limit}, unread_only: {unread_only}")
+
+        if not email_tools_module.mailbox:
+            print("[DEBUG] /api/emails - Mailbox is None, attempting to initialize...")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, email_tools_module.init_email)
+            print("[DEBUG] /api/emails - Mailbox initialized")
+
+        # Use the standalone async implementation
+        emails, unread_count = await fetch_emails_for_folder_async(
+            email_tools_module.mailbox,
+            folder,
+            limit=limit,
+            unread_only=unread_only
+        )
+
+        print(f"[DEBUG] /api/emails - Returning {len(emails)} emails from {folder}")
+
+        return {
+            "status": "success",
+            "folder": folder,
+            "emails": emails,
+            "total": len(emails),
+            "unread_count": unread_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] /api/emails - Exception: {e}")
+        print(f"[ERROR] /api/emails - Traceback:\n{traceback.format_exc()}")
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.post("/api/emails/{email_uid}/flag")
+async def flag_email_endpoint(
+    email_uid: str,
+    flag_type: str = "seen",
+    value: bool = True
+):
+    """Flag or unflag an email."""
+    # Use the same dedicated session ID for consistency
+    EMAILS_UI_SESSION_ID = "emails_ui_session"
+
+    try:
+        if not email_tools_module.mailbox:
+            raise HTTPException(
+                status_code=503,
+                detail="Email service not connected. Please check your email configuration."
+            )
+
+        # Set the dedicated Emails UI session context
+        token = email_tools_module.chat_session_id_ctx.set(EMAILS_UI_SESSION_ID)
+
+        try:
+            result = flag_email.func(
+                email_uid=email_uid,
+                flag_type=flag_type,
+                value=value
+            )
+
+            if "Error" in result:
+                raise HTTPException(status_code=400, detail=result)
+
+            return {
+                "status": "success",
+                "message": result
+            }
+
+        finally:
+            email_tools_module.chat_session_id_ctx.reset(token)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.delete("/api/emails/{email_uid}")
+async def delete_email_endpoint(
+    email_uid: str
+):
+    """Delete an email by UID."""
+    try:
+        if not email_tools_module.mailbox:
+            raise HTTPException(
+                status_code=503,
+                detail="Email service not connected. Please check your email configuration."
+            )
+
+        # Validate UID is a number (keep as string for imap_tools)
+        try:
+            int(email_uid)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid email UID: {email_uid}. Must be a number."
+            )
+
+        # Delete the email
+        mailbox = email_tools_module.mailbox
+        mailbox.delete([email_uid])
+
+        return {
+            "status": "success",
+            "message": f"Email #{email_uid} deleted successfully!"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.post("/api/emails/{email_uid}/move")
+async def move_email_endpoint(
+    email_uid: str,
+    destination_folder: str
+):
+    """Move an email to a different folder."""
+    try:
+        if not email_tools_module.mailbox:
+            raise HTTPException(
+                status_code=503,
+                detail="Email service not connected. Please check your email configuration."
+            )
+
+        # Validate UID is a number (keep as string for imap_tools)
+        try:
+            int(email_uid)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid email UID: {email_uid}. Must be a number."
+            )
+
+        # Get the mailbox
+        mailbox = email_tools_module.mailbox
+
+        # Check if destination folder exists
+        all_folders = [f.name for f in mailbox.folder.list()]
+
+        # Handle Gmail folder naming
+        target_folder = destination_folder
+        if destination_folder not in all_folders:
+            if "[Gmail]/" + destination_folder in all_folders:
+                target_folder = "[Gmail]/" + destination_folder
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Folder '{destination_folder}' not found. Available folders: {', '.join(all_folders)}"
+                )
+
+        # Move the email using imap_tools (UID should be string)
+        mailbox.move([email_uid], target_folder)
+
+        return {
+            "status": "success",
+            "message": f"Email #{email_uid} moved to '{target_folder}' successfully!"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.post("/api/emails/send")
+async def send_email_endpoint(
+    to: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+    cc: Optional[str] = Form(None),
+    bcc: Optional[str] = Form(None),
+    html: bool = Form(False)
+):
+    """Send an email."""
+    try:
+        if not email_tools_module.smtp_client:
+            raise HTTPException(
+                status_code=503,
+                detail="Email service not connected. Please check your email configuration."
+            )
+
+        # Get SMTP client from email_tools module
+        smtp_client = email_tools_module.smtp_client
+
+        # Build email message
+        from email.message import EmailMessage
+        from email.utils import formataddr
+
+        msg = EmailMessage()
+        msg['Subject'] = subject
+        msg['From'] = smtp_client.login
+
+        # Parse recipients
+        recipients = []
+
+        # Handle 'to' field - support both "email" and "Name <email>" formats
+        def parse_email(addr):
+            """Parse email address, supporting both 'email' and 'Name <email>' formats."""
+            if '<' in addr and '>' in addr:
+                # Format: "Name <email>" or "Name <email>" or "Name<email>"
+                name = addr[:addr.index('<')].strip().strip('"')
+                email_addr = addr[addr.index('<') + 1:addr.index('>')].strip()
+                return (name, email_addr) if name else ('', email_addr)
+            else:
+                # Just email address
+                return ('', addr.strip())
+
+        # Parse 'to' recipients (comma separated)
+        for addr in to.split(','):
+            addr = addr.strip()
+            if addr:
+                name, email_addr = parse_email(addr)
+                msg['To'] = formataddr((name, email_addr)) if name else email_addr
+                recipients.append(email_addr)
+
+        # Parse 'cc' recipients if provided
+        if cc:
+            for addr in cc.split(','):
+                addr = addr.strip()
+                if addr:
+                    name, email_addr = parse_email(addr)
+                    msg['Cc'] = formataddr((name, email_addr)) if name else email_addr
+                    recipients.append(email_addr)
+
+        # Parse 'bcc' recipients if provided
+        if bcc:
+            for addr in bcc.split(','):
+                addr = addr.strip()
+                if addr:
+                    name, email_addr = parse_email(addr)
+                    recipients.append(email_addr)
+
+        # Set body
+        content_type = 'html' if html else 'plain'
+        msg.set_content(body, subtype=content_type)
+
+        # Send email
+        smtp_client.send_message(
+            msg,
+            to=recipients,
+            from_=smtp_client.login
+        )
+
+        return {
+            "status": "success",
+            "message": f"Email sent successfully to {to}!"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+# ==================== Email Loading WebSocket - Completely New Implementation ====================
+# This is a standalone implementation that does NOT use read_emails or any email_tools functions
+# It directly interacts with the IMAP mailbox using imap_tools
+
+EMAILS_UI_SESSION_ID = "emails_ui_session"
+
+# In-memory cache for Emails UI (simple dictionary-based)
+_emails_ui_cache: dict[str, list[dict]] = {}
+_folder_unread_counts: dict[str, int] = {}
+
+# Global lock to prevent concurrent IMAP operations
+# IMAP connections are not thread-safe, so we need to serialize access
+_imap_lock = asyncio.Lock()
+
+
+def _get_emails_from_cache(folder_name: str) -> list[dict]:
+    """Get emails from cache for a folder."""
+    return _emails_ui_cache.get(folder_name, [])
+
+
+def _save_emails_to_cache(folder_name: str, emails: list[dict]):
+    """Save emails to cache for a folder."""
+    _emails_ui_cache[folder_name] = emails
+
+
+def _get_folder_unread_count(folder_name: str) -> int:
+    """Get unread count for a folder."""
+    return _folder_unread_counts.get(folder_name, 0)
+
+
+def _update_folder_unread_count(folder_name: str, count: int):
+    """Update unread count for a folder."""
+    _folder_unread_counts[folder_name] = count
+
+
+async def fetch_folders_async(mailbox) -> list[dict]:
+    """Fetch folder list asynchronously.
+
+    This is a standalone function that directly uses the mailbox to fetch folders.
+    Does NOT use any email_tools functions.
+    Uses a global lock to prevent concurrent IMAP operations.
+    """
+    import asyncio
+
+    # Acquire lock to prevent concurrent IMAP operations
+    async with _imap_lock:
+        # Fetch folders in thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+
+        def get_folders():
+            return list(mailbox.folder.list())
+
+        folders = await loop.run_in_executor(None, get_folders)
+
+        # Filter and format folders
+        folder_list = []
+        for folder in folders:
+            is_selectable = '\\Noselect' not in folder.flags
+            if is_selectable:
+                folder_list.append({
+                    "name": folder.name,
+                    "flags": list(folder.flags) if folder.flags else []
+                })
+
+        return folder_list
+
+
+async def fetch_emails_for_folder_async(
+    mailbox,
+    folder_name: str,
+    limit: int = 50,
+    unread_only: bool = False
+) -> tuple[list[dict], int]:
+    """Fetch emails for a specific folder asynchronously.
+
+    Returns:
+        tuple: (list of formatted email dicts, unread count)
+
+    This is a COMPLETELY NEW implementation that:
+    1. Does NOT use read_emails
+    2. Does NOT use email_tools cache
+    3. Directly fetches from IMAP using imap_tools
+    4. Formats emails in a simple, straightforward way
+    5. Uses a global lock to prevent concurrent IMAP operations
+    """
+    import asyncio
+    from imap_tools import AND
+
+    # Acquire lock to prevent concurrent IMAP operations
+    async with _imap_lock:
+        # Switch to the folder
+        loop = asyncio.get_event_loop()
+
+        def switch_folder():
+            mailbox.folder.set(folder_name)
+
+        await loop.run_in_executor(None, switch_folder)
+
+        # Build search criteria
+        criteria = []
+        if unread_only:
+            criteria = [AND(seen=False)]
+
+        # Fetch emails
+        def fetch_from_imap():
+            if criteria:
+                return list(mailbox.fetch(AND(*criteria), limit=limit, mark_seen=False))
+            else:
+                return list(mailbox.fetch(limit=limit, mark_seen=False))
+
+        raw_emails = await loop.run_in_executor(None, fetch_from_imap)
+
+    # Format emails
+    formatted_emails = []
+    unread_count = 0
+
+    for email in raw_emails:
+        try:
+            # Extract basic fields
+            subject = getattr(email, 'subject', '(No Subject)')
+            uid = str(email.uid)
+            date_str = getattr(email, 'date_str', '')
+
+            # Parse sender
+            sender_email = 'unknown@example.com'
+            sender_name = ''
+
+            from_field = str(getattr(email, 'from_', ''))
+            if from_field:
+                # Try to extract email from from field
+                import re
+                email_match = re.search(r'<([^>]+)>', from_field)
+                if email_match:
+                    # Format: "Name <email>" or <email>
+                    sender_email = email_match.group(1)
+                    # Extract name before email
+                    # Matches: "Name <email>", 'Name <email>', Name <email>
+                    name_match = re.match(r'^"?([^"<>]+?)"?\s*<', from_field)
+                    sender_name = name_match.group(1).strip() if name_match else ''
+                else:
+                    # No angle brackets - the whole string is either:
+                    # 1. Just an email address (someone@example.com)
+                    # 2. Just a name (without @)
+                    if '@' in from_field:
+                        # It's an email address
+                        sender_email = from_field.strip()
+                        sender_name = ''  # Don't extract username from email
+                    else:
+                        # It's just a name without email
+                        sender_name = from_field.strip()
+
+            # Parse recipients
+            recipients = []
+            to_field = getattr(email, 'to', [])
+            if to_field:
+                for to in to_field:
+                    to_str = str(to)
+                    import re
+                    email_match = re.search(r'<([^>]+)>', to_str)
+                    if email_match:
+                        recipients.append(email_match.group(1))
+                    elif '@' in to_str:
+                        recipients.append(to_str.strip())
+
+            # Get body - prefer HTML over plain text for richer content
+            # HTML emails contain formatting, images, links, etc.
+            body = email.html or email.text or ''
+
+            # Get preview text - strip HTML tags for list view
+            preview_text = email.text or ''
+            if not preview_text and email.html:
+                # Strip HTML tags if no plain text available
+                import re
+                preview_text = re.sub(r'<[^>]+>', '', email.html)
+                preview_text = re.sub(r'\s+', ' ', preview_text).strip()
+
+            # Check flags
+            is_unread = '\\Seen' not in email.flags
+            is_flagged = '\\Flagged' in email.flags
+
+            if is_unread:
+                unread_count += 1
+
+            # Get attachments
+            attachments = []
+            if hasattr(email, 'attachments'):
+                for att in email.attachments:
+                    if att.content_disposition and att.content_disposition != 'inline':
+                        attachments.append({
+                            'filename': att.filename or 'unnamed',
+                            'size': len(att.payload) if att.payload else 0,
+                            'contentType': att.content_type if hasattr(att, 'content_type') else 'application/octet-stream'
+                        })
+
+            # Create formatted email dict
+            formatted_email = {
+                'uid': uid,
+                'subject': subject,
+                'from': sender_email,
+                'fromName': sender_name or sender_email,
+                'to': recipients,
+                'date': date_str,
+                'body': body,
+                'preview': preview_text[:500] if preview_text else '',  # First 500 chars for list view
+                'isUnread': is_unread,
+                'isFlagged': is_flagged,
+                'attachments': attachments
+            }
+
+            formatted_emails.append(formatted_email)
+
+        except Exception as e:
+            print(f"[Emails WS] Error formatting email {email.uid if hasattr(email, 'uid') else 'unknown'}: {e}")
+            continue
+
+    # Save to cache
+    _save_emails_to_cache(folder_name, formatted_emails)
+    _update_folder_unread_count(folder_name, unread_count)
+
+    print(f"[Emails WS] Fetched and formatted {len(formatted_emails)} emails from {folder_name} ({unread_count} unread)")
+
+    return formatted_emails, unread_count
+
+
+@app.websocket("/ws/emails")
+async def websocket_emails(websocket: WebSocket):
+    """WebSocket endpoint for streaming email loading progress.
+
+    This is a COMPLETELY NEW implementation that:
+    1. Does NOT use read_emails function
+    2. Does NOT use email_tools cache
+    3. Directly uses IMAP mailbox via imap_tools
+    4. Maintains its own simple in-memory cache
+    5. All operations are async and non-blocking
+
+    Workflow:
+    1. Initialize email connection if needed
+    2. Fetch folder list asynchronously
+    3. Send folders to client immediately
+    4. Load emails for each folder progressively
+    5. Stream results to client in real-time
+
+    Message types (Server -> Client):
+    - status: Status update
+    - folders: Complete folder list
+    - folder_loading: Starting to load a folder
+    - folder_loaded: Folder loading complete with email data
+    - error: Error occurred
+    - complete: All folders loaded
+    - pong: Response to ping
+
+    Message types (Client -> Server):
+    - ping: Keep-alive heartbeat
+    - refresh: Reload all emails
+    """
+    await websocket.accept()
+
+    websocket_id = id(websocket)
+    active_connections[websocket_id] = websocket
+
+    print(f"[Emails WS] Connection established: websocket_{websocket_id}")
+
+    try:
+        # Step 0: Initialize email connection if needed
+        if not email_tools_module.mailbox:
+            await websocket.send_json({
+                "type": "status",
+                "message": "Initializing email connection..."
+            })
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, email_tools_module.init_email)
+
+            print(f"[Emails WS] Email connection initialized")
+
+        # Step 1: Fetch folder list
+        await websocket.send_json({
+            "type": "status",
+            "message": "Fetching folder list..."
+        })
+
+        folders = await fetch_folders_async(email_tools_module.mailbox)
+
+        await websocket.send_json({
+            "type": "folders",
+            "folders": folders,
+            "total": len(folders)
+        })
+
+        print(f"[Emails WS] Sent {len(folders)} folders to client")
+
+        # Step 2: Load emails for each folder progressively
+        # Sort folders by priority: INBOX first, then common folders, then others
+        def get_folder_priority(folder_name: str) -> int:
+            """
+            Get folder priority for loading order.
+            Lower number = higher priority (loaded first).
+
+            This works with all IMAP providers, not just Gmail.
+            """
+            name_lower = folder_name.lower()
+
+            # Priority 0: INBOX (always first)
+            if name_lower == 'inbox':
+                return 0
+
+            # Priority 10-70: Common important folders (recognized across providers)
+            # These mappings work with Gmail, Outlook, Yahoo, Apple, and most IMAP servers
+            priority_folders = {
+                # Sent folders
+                'sent': 10,
+                'sent items': 10,
+                'sent mail': 10,
+                '[gmail]/sent': 10,
+
+                # Draft folders
+                'drafts': 20,
+                'draft': 20,
+                '[gmail]/drafts': 20,
+
+                # Spam/Junk folders
+                'junk': 30,
+                'spam': 30,
+                'bulk mail': 30,
+                '[gmail]/spam': 30,
+
+                # Trash folders
+                'trash': 40,
+                'deleted': 40,
+                'deleted items': 40,
+                'deleted messages': 40,
+                'bin': 40,
+                '[gmail]/trash': 40,
+
+                # Archive folders
+                'archive': 50,
+                'all mail': 50,
+                '[gmail]/all mail': 50,
+
+                # Starred/Flagged folders
+                'starred': 60,
+                'flagged': 60,
+                '[gmail]/starred': 60,
+
+                # Important folders
+                'important': 70,
+                '[gmail]/important': 70,
+            }
+
+            # Check for exact match (case-insensitive)
+            if name_lower in priority_folders:
+                return priority_folders[name_lower]
+
+            # Priority 100: Special namespace folders (like [Gmail], [Yahoo], etc.)
+            # These get lower priority than common folders but higher than custom folders
+            if '[' in name_lower and ']' in name_lower:
+                return 100
+
+            # Priority 200: All other custom folders (loaded last)
+            return 200
+
+        # Sort folders by priority
+        ordered_folders = sorted(folders, key=lambda f: get_folder_priority(f['name']))
+
+        for idx, folder_dict in enumerate(ordered_folders, 1):
+            folder_name = folder_dict['name']
+
+            # Notify client we're starting to load this folder
+            await websocket.send_json({
+                "type": "folder_loading",
+                "folder": folder_name,
+                "progress": idx,
+                "total": len(ordered_folders)
+            })
+
+            print(f"[Emails WS] Loading folder {idx}/{len(ordered_folders)}: {folder_name}")
+
+            try:
+                # Fetch emails using our NEW implementation
+                emails, unread_count = await fetch_emails_for_folder_async(
+                    email_tools_module.mailbox,
+                    folder_name,
+                    limit=50,
+                    unread_only=False
+                )
+
+                # Send loaded folder data to client
+                await websocket.send_json({
+                    "type": "folder_loaded",
+                    "folder": folder_name,
+                    "emails": emails,
+                    "total": len(emails),
+                    "unread_count": unread_count
+                })
+
+                print(f"[Emails WS] ✅ Loaded {len(emails)} emails from {folder_name} ({unread_count} unread)")
+
+                # Small delay to avoid overwhelming the client
+                await asyncio.sleep(0.2)
+
+            except Exception as e:
+                import traceback
+                error_msg = f"Error loading folder {folder_name}: {str(e)}"
+                print(f"[Emails WS] ❌ {error_msg}")
+                print(traceback.format_exc())
+
+                await websocket.send_json({
+                    "type": "error",
+                    "folder": folder_name,
+                    "message": error_msg
+                })
+
+        # All folders loaded
+        await websocket.send_json({
+            "type": "complete",
+            "message": "All folders loaded successfully"
+        })
+
+        print(f"[Emails WS] ✅ Completed loading all folders for websocket_{websocket_id}")
+
+        # Keep connection alive for potential client requests
+        try:
+            while True:
+                data = await websocket.receive_json()
+
+                if data.get("action") == "refresh":
+                    # Client wants to refresh - could be optimized to only reload changed folders
+                    await websocket.send_json({
+                        "type": "status",
+                        "message": "Refreshing emails..."
+                    })
+                    # For simplicity, close and let client reconnect
+                    break
+
+                elif data.get("action") == "ping":
+                    await websocket.send_json({"type": "pong"})
+
+        except Exception:
+            # Client disconnected or error
+            pass
+
+    except WebSocketDisconnect:
+        print(f"[Emails WS] Connection closed: websocket_{websocket_id}")
+
+    except Exception as e:
+        import traceback
+        print(f"[Emails WS] Error: {e}")
+        print(traceback.format_exc())
+
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Server error: {str(e)}"
+            })
+        except Exception:
+            pass
+
+    finally:
+        if websocket_id in active_connections:
+            del active_connections[websocket_id]
+            print(f"[Emails WS] Cleaned up connection: websocket_{websocket_id}")
 
 
 @app.websocket("/ws/chat")

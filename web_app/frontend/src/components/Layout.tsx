@@ -11,7 +11,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { path: '/', label: 'Chat', icon: MessageSquare },
-    { path: '/emails', label: 'Emails (Unfinished)', icon: Mail },
+    { path: '/emails', label: 'Emails', icon: Mail },
     { path: '/contacts', label: 'Contacts', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];

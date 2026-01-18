@@ -219,7 +219,7 @@ def read_emails(
     unread_only: bool = False,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    from_: Optional[str] = None,
+    from_: str | List[str] | None = None,
     include_attachments: bool = True
 ):
     """Read emails with flexible filtering options. Emails are cached after fetching.
@@ -280,8 +280,8 @@ def read_emails(
 
     # Get or create cache for current chat session
     session_id = chat_session_id_ctx.get()
-    cache = get_emails_cache(session_id)
     set_emails_cache(session_id, [])  # Clear cache for this session
+    cache = get_emails_cache(session_id)  # Get the new empty cache reference
     email_info = []
     for idx, email in enumerate(emails, 1):
         cache.append(email)
@@ -398,7 +398,7 @@ def delete_email(email_index: Optional[int] = None, email_uid: Optional[str] = N
 
     Args:
         email_index (int, optional): The index number of the email to delete (as shown in read_emails output). Defaults to None.
-        email_uid (int, optional): The UID of the email to delete. Defaults to None.
+        email_uid (str, optional): The UID of the email to delete. Defaults to None.
 
     Returns:
         str: Success or error message.
@@ -419,7 +419,13 @@ def delete_email(email_index: Optional[int] = None, email_uid: Optional[str] = N
                 return f"Error: Email #{email_index} has already been deleted. "
             email_uid = email_to_delete.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
+            # Convert email_uid to int for comparison with email.uid (which is an integer from imap_tools)
+            try:
+                email_uid_int = int(email_uid)
+            except (ValueError, TypeError):
+                return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
+
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid_int), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found. The email may have already been deleted."
         else:
@@ -479,7 +485,13 @@ def move_email(
                 return f"Error: Email #{email_index} has already been deleted."
             email_uid = email_to_move.uid
         elif email_uid is not None:
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
+            # Convert email_uid to int for comparison with email.uid (which is an integer from imap_tools)
+            try:
+                email_uid_int = int(email_uid)
+            except (ValueError, TypeError):
+                return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
+
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid_int), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found in cache."
         else:

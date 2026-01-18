@@ -54,3 +54,133 @@ body {
     background: #555;
   }
 }
+
+/* Email HTML content styles */
+.email-body-content {
+  /* Reset styles for email HTML content */
+  line-height: 1.6;
+  font-size: 14px;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Email body typography */
+.email-body-content h1,
+.email-body-content h2,
+.email-body-content h3,
+.email-body-content h4,
+.email-body-content h5,
+.email-body-content h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.email-body-content h1 { font-size: 2em; }
+.email-body-content h2 { font-size: 1.5em; }
+.email-body-content h3 { font-size: 1.25em; }
+
+.email-body-content p {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.email-body-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.email-body-content a:hover {
+  color: #1d4ed8;
+}
+
+/* Email body lists */
+.email-body-content ul,
+.email-body-content ol {
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+.email-body-content li {
+  margin-bottom: 0.25em;
+}
+
+/* Email body tables */
+.email-body-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+.email-body-content th,
+.email-body-content td {
+  border: 1px solid #d1d5db;
+  padding: 0.5em;
+  text-align: left;
+}
+
+.email-body-content th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+/* Email body images */
+.email-body-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em 0;
+}
+
+/* Email body blockquotes */
+.email-body-content blockquote {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 4px solid #d1d5db;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Email body code */
+.email-body-content code {
+  background-color: #f3f4f6;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.email-body-content pre {
+  background-color: #f3f4f6;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.email-body-content pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+/* Email body dividers */
+.email-body-content hr {
+  border: none;
+  border-top: 1px solid #d1d5db;
+  margin: 2em 0;
+}
+
+/* Email body strong/bold and italic */
+.email-body-content strong,
+.email-body-content b {
+  font-weight: 600;
+}
+
+.email-body-content em,
+.email-body-content i {
+  font-style: italic;
+}
+
