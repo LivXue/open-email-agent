@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import {
   RefreshCw,
   Inbox,
@@ -21,48 +21,13 @@ import {
   X,
   Send,
 } from 'lucide-react';
+import { useEmailContext, type EmailData, type FolderState } from '../contexts/EmailContext';
 
 // API base URL - constructed from environment variables
 const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT || '2821';
 const API_BASE = `http://localhost:${BACKEND_PORT}`;
 
-interface EmailData {
-  uid: number;
-  index: number;
-  subject: string;
-  from: string;
-  fromName: string;
-  to: string[];
-  date: string;
-  body: string;
-  preview: string;  // Plain text preview for list view
-  isUnread: boolean;
-  isFlagged: boolean;
-  attachments: AttachmentInfo[];
-}
-
-interface AttachmentInfo {
-  filename: string;
-  size: number;
-  contentType: string;
-}
-
-interface Folder {
-  name: string;
-  flags: string[];
-}
-
-interface FolderState {
-  name: string;
-  flags: string[];
-  emails: EmailData[];
-  loadStatus: 'unloaded' | 'loading' | 'loaded' | 'error';
-  unreadCount: number;
-  totalCount: number;
-}
-
 type FilterType = 'all' | 'unread' | 'starred';
-type LoadingState = 'idle' | 'loading' | 'success' | 'error';
 type ComposeMode = 'reply' | 'forward' | 'compose';
 
 interface ComposeState {
@@ -75,8 +40,17 @@ interface ComposeState {
 }
 
 export function EmailPage() {
+  // Use email context for shared state
+  const {
+    folderStates,
+    fetchEmailsForFolder,
+    reloadFolder,
+    updateEmailAcrossFolders,
+    removeEmailFromFolders,
+    isLoading,
+  } = useEmailContext();
+
   const [selectedFolder, setSelectedFolder] = useState<string>('INBOX');
-  const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [filter, setFilter] = useState<FilterType>('all');
   const [expandedEmail, setExpandedEmail] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,197 +66,6 @@ export function EmailPage() {
   });
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
 
-  // Folder states with email caching
-  const [folderStates, setFolderStates] = useState<Record<string, FolderState>>({
-    'INBOX': {
-      name: 'INBOX',
-      flags: [],
-      emails: [],
-      loadStatus: 'unloaded',
-      unreadCount: 0,
-      totalCount: 0,
-    },
-  });
-
-  const [folderLoading, setFolderLoading] = useState<boolean>(false);
-  const loadingQueueRef = useRef<string[]>([]);
-
-  // Track if folders have been fetched to prevent StrictMode duplicate calls
-  const hasFetchedFoldersRef = useRef<boolean>(false);
-
-  // Fetch folders list
-  const fetchFolders = async () => {
-    // Prevent duplicate calls from React StrictMode
-    // Check BEFORE doing any work
-    if (hasFetchedFoldersRef.current) {
-      console.log('[Frontend] Folders already fetched, skipping duplicate request');
-      return;
-    }
-
-    // Mark as fetching IMMEDIATELY to prevent race conditions
-    // This must be set synchronously before any async operations
-    hasFetchedFoldersRef.current = true;
-
-    try {
-      setFolderLoading(true);
-      console.log('[Frontend] Fetching folders from:', `${API_BASE}/api/emails/folders`);
-      const response = await fetch(`${API_BASE}/api/emails/folders`);
-      const data = await response.json();
-
-      console.log('[Frontend] Folders response:', data);
-
-      if (data.status === 'success') {
-        console.log('[Frontend] Loaded folders:', data.folders);
-
-        // Initialize folder states
-        const newFolderStates: Record<string, FolderState> = {};
-        data.folders.forEach((folder: Folder) => {
-          newFolderStates[folder.name] = {
-            ...folder,
-            emails: [],
-            loadStatus: 'unloaded',
-            unreadCount: 0,
-            totalCount: 0,
-          };
-        });
-
-        setFolderStates(newFolderStates);
-
-        // Start loading folders progressively
-        loadFoldersProgressively(Object.keys(newFolderStates));
-      } else {
-        console.error('[Frontend] Failed to load folders:', data);
-        setErrorMessage('Failed to load folders');
-        // Reset flag on error so we can retry
-        hasFetchedFoldersRef.current = false;
-      }
-    } catch (error) {
-      console.error('[Frontend] Failed to fetch folders:', error);
-      setErrorMessage('Failed to connect to email server');
-      // Reset flag on error so we can retry
-      hasFetchedFoldersRef.current = false;
-    } finally {
-      setFolderLoading(false);
-    }
-  };
-
-  // Load folders progressively (one by one)
-  const loadFoldersProgressively = async (folderNames: string[]) => {
-    loadingQueueRef.current = folderNames;
-
-    for (const folderName of folderNames) {
-      // Check if user switched to a different folder
-      if (loadingQueueRef.current.indexOf(folderName) === -1) {
-        break;
-      }
-
-      // Check current state before loading
-      const currentState = folderStates[folderName];
-      if (currentState && currentState.loadStatus !== 'unloaded') {
-        // Already loaded or loading, skip
-        console.log(`[Frontend] Skipping ${folderName}, status: ${currentState.loadStatus}`);
-        continue;
-      }
-
-      // Mark as loading BEFORE starting the fetch
-      setFolderStates(prev => ({
-        ...prev,
-        [folderName]: {
-          ...(prev[folderName] || { name: folderName, flags: [], emails: [], unreadCount: 0, totalCount: 0 }),
-          loadStatus: 'loading',
-        },
-      }));
-
-      // Load emails for this folder
-      await fetchEmailsForFolder(folderName);
-
-      // Small delay between folder loads
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  };
-
-  // Fetch emails for a specific folder
-  const fetchEmailsForFolder = async (folderName: string) => {
-    try {
-      // Double-check if already loading or loaded to prevent duplicate requests
-      const currentState = folderStates[folderName];
-      if (currentState && currentState.loadStatus === 'loading') {
-        console.log(`[Frontend] ${folderName} is already loading, skipping duplicate request`);
-        return;
-      }
-      if (currentState && currentState.loadStatus === 'loaded') {
-        console.log(`[Frontend] ${folderName} already loaded, skipping duplicate request`);
-        return;
-      }
-
-      console.log(`[Frontend] Loading emails for folder: ${folderName}`);
-      const response = await fetch(
-        `${API_BASE}/api/emails?folder=${encodeURIComponent(folderName)}&limit=100&unread_only=false`
-      );
-
-      const data = await response.json();
-      console.log(`[Frontend] Emails response for ${folderName}:`, data);
-
-      if (data.status === 'success') {
-        const emails = data.emails || [];
-        const unreadCount = emails.filter((e: EmailData) => e.isUnread).length;
-
-        setFolderStates(prev => ({
-          ...prev,
-          [folderName]: {
-            ...prev[folderName],
-            emails: emails,
-            loadStatus: 'loaded',
-            unreadCount: unreadCount,
-            totalCount: emails.length,
-          },
-        }));
-
-        console.log(`[Frontend] Loaded ${emails.length} emails from ${folderName}`);
-      } else {
-        throw new Error(data.detail || 'Failed to load emails');
-      }
-    } catch (error) {
-      console.error(`[Frontend] Failed to fetch emails for ${folderName}:`, error);
-
-      setFolderStates(prev => ({
-        ...prev,
-        [folderName]: {
-          ...prev[folderName],
-          loadStatus: 'error',
-        },
-      }));
-    }
-  };
-
-  // Fetch emails for currently selected folder
-  const fetchEmails = async (folder: string, filterType: FilterType = 'all') => {
-    setLoadingState('loading');
-    setErrorMessage('');
-    setExpandedEmail(null);
-
-    try {
-      // Check if folder is already loaded
-      const folderState = folderStates[folder];
-      if (!folderState) {
-        setLoadingState('error');
-        setErrorMessage('Folder not found');
-        return;
-      }
-
-      // If folder is not loaded yet, load it now
-      if (folderState.loadStatus === 'unloaded') {
-        await fetchEmailsForFolder(folder);
-      }
-
-      setLoadingState('success');
-    } catch (error) {
-      console.error('[Frontend] Failed to fetch emails:', error);
-      setErrorMessage('Failed to connect to email server');
-      setLoadingState('error');
-    }
-  };
-
   // Flag email (mark as read/unread or star/unstar)
   const flagEmail = async (emailUid: number, flagType: string, value: boolean) => {
     try {
@@ -294,32 +77,14 @@ export function EmailPage() {
       const data = await response.json();
 
       if (data.status === 'success') {
-        // Update local state
-        setFolderStates(prev => {
-          const newStates = { ...prev };
-          Object.keys(newStates).forEach(folderName => {
-            const folder = newStates[folderName];
-            const updatedEmails = folder.emails.map(email => {
-              if (email.uid === emailUid) {
-                if (flagType === 'seen') {
-                  return { ...email, isUnread: !value };
-                } else if (flagType === 'flagged') {
-                  return { ...email, isFlagged: value };
-                }
-              }
-              return email;
-            });
-
-            // Update unread count
-            const unreadCount = updatedEmails.filter(e => e.isUnread).length;
-
-            newStates[folderName] = {
-              ...folder,
-              emails: updatedEmails,
-              unreadCount: unreadCount,
-            };
-          });
-          return newStates;
+        // Update local state across all folders
+        updateEmailAcrossFolders(emailUid, (email) => {
+          if (flagType === 'seen') {
+            return { ...email, isUnread: !value };
+          } else if (flagType === 'flagged') {
+            return { ...email, isFlagged: value };
+          }
+          return email;
         });
       } else {
         setErrorMessage(data.detail || 'Failed to update email');
@@ -344,23 +109,8 @@ export function EmailPage() {
       const data = await response.json();
 
       if (data.status === 'success') {
-        // Remove from local state
-        setFolderStates(prev => {
-          const newStates = { ...prev };
-          Object.keys(newStates).forEach(folderName => {
-            const folder = newStates[folderName];
-            const updatedEmails = folder.emails.filter(email => email.uid !== emailUid);
-            const unreadCount = updatedEmails.filter(e => e.isUnread).length;
-
-            newStates[folderName] = {
-              ...folder,
-              emails: updatedEmails,
-              unreadCount: unreadCount,
-              totalCount: updatedEmails.length,
-            };
-          });
-          return newStates;
-        });
+        // Remove from local state across all folders
+        removeEmailFromFolders(emailUid);
         setExpandedEmail(null);
       } else {
         setErrorMessage(data.detail || 'Failed to delete email');
@@ -421,23 +171,8 @@ export function EmailPage() {
       const data = await response.json();
 
       if (data.status === 'success') {
-        // Remove from local state and update counts
-        setFolderStates(prev => {
-          const newStates = { ...prev };
-          Object.keys(newStates).forEach(folderName => {
-            const folder = newStates[folderName];
-            const updatedEmails = folder.emails.filter(e => e.uid !== emailUid);
-            const unreadCount = updatedEmails.filter(e => e.isUnread).length;
-
-            newStates[folderName] = {
-              ...folder,
-              emails: updatedEmails,
-              unreadCount: unreadCount,
-              totalCount: updatedEmails.length,
-            };
-          });
-          return newStates;
-        });
+        // Remove from local state across all folders
+        removeEmailFromFolders(emailUid);
         setExpandedEmail(null);
       } else {
         setErrorMessage(data.detail || 'Failed to archive email');
@@ -497,13 +232,8 @@ export function EmailPage() {
     }
   };
 
-  // Initial load
-  useEffect(() => {
-    fetchFolders();
-  }, []);
-
-  // Note: We don't need useEffect for selectedFolder because:
-  // 1. loadFoldersProgressively() already loads all folders in background
+  // Note: We don't need useEffect for initial load or selectedFolder because:
+  // 1. EmailContext automatically loads all folders when the app starts
   // 2. When user selects a folder, it's already loaded (or loading)
   // 3. The UI just switches to display the cached data
   // This prevents duplicate loading requests
@@ -606,60 +336,6 @@ export function EmailPage() {
     }
   };
 
-  // Manually reload a folder
-  const reloadFolder = async (folderName: string) => {
-    // Set to loading state first
-    setFolderStates(prev => ({
-      ...prev,
-      [folderName]: {
-        ...prev[folderName],
-        loadStatus: 'loading',
-      },
-    }));
-
-    try {
-      console.log(`[Frontend] Reloading emails for folder: ${folderName}`);
-      const response = await fetch(
-        `${API_BASE}/api/emails?folder=${encodeURIComponent(folderName)}&limit=100&unread_only=false`
-      );
-
-      const data = await response.json();
-      console.log(`[Frontend] Reload response for ${folderName}:`, data);
-
-      if (data.status === 'success') {
-        const emails = data.emails || [];
-        const unreadCount = emails.filter((e: EmailData) => e.isUnread).length;
-
-        setFolderStates(prev => ({
-          ...prev,
-          [folderName]: {
-            ...prev[folderName],
-            emails: emails,
-            loadStatus: 'loaded',
-            unreadCount: unreadCount,
-            totalCount: emails.length,
-          },
-        }));
-
-        console.log(`[Frontend] Reloaded ${emails.length} emails from ${folderName}`);
-      } else {
-        throw new Error(data.detail || 'Failed to reload emails');
-      }
-    } catch (error) {
-      console.error(`[Frontend] Failed to reload emails for ${folderName}:`, error);
-
-      setFolderStates(prev => ({
-        ...prev,
-        [folderName]: {
-          ...prev[folderName],
-          loadStatus: 'error',
-        },
-      }));
-
-      setErrorMessage(`Failed to reload ${folderName}`);
-    }
-  };
-
   return (
     <div className="h-full flex bg-gray-50">
       {/* Sidebar - Folders */}
@@ -680,7 +356,7 @@ export function EmailPage() {
         {/* Folders list */}
         <div className="flex-1 overflow-y-auto px-2">
           {/* All folders - display dynamically based on actual folder list from server */}
-          {folderLoading ? (
+          {isLoading ? (
             <div className="px-4 py-2 text-sm text-gray-500 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading folders...
