@@ -22,6 +22,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useEmailContext, type EmailData, type FolderState } from '../contexts/EmailContext';
+import { useToast } from '../contexts/ToastContext';
 
 // API base URL - constructed from environment variables
 const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT || '2821';
@@ -65,6 +66,8 @@ interface ComposeState {
   isOpen: boolean;
   mode: ComposeMode;
   to: string;
+  cc: string;
+  bcc: string;
   subject: string;
   body: string;
   originalEmail?: EmailData;
@@ -81,6 +84,9 @@ export function EmailPage() {
     isLoading,
   } = useEmailContext();
 
+  // Use toast for notifications
+  const { showSuccess, showError, showWarning } = useToast();
+
   const [selectedFolder, setSelectedFolder] = useState<string>('INBOX');
   const [filter, setFilter] = useState<FilterType>('all');
   const [expandedEmail, setExpandedEmail] = useState<number | null>(null);
@@ -92,6 +98,8 @@ export function EmailPage() {
     isOpen: false,
     mode: 'compose',
     to: '',
+    cc: '',
+    bcc: '',
     subject: '',
     body: '',
   });
@@ -162,6 +170,8 @@ export function EmailPage() {
       isOpen: true,
       mode: 'reply',
       to: fromEmail,
+      cc: '',
+      bcc: '',
       subject: email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`,
       body: `\n\n---------- Original Message ----------\nFrom: ${email.fromName || email.from}\nDate: ${email.date}\nSubject: ${email.subject}\n\n`,
       originalEmail: email,
@@ -174,6 +184,8 @@ export function EmailPage() {
       isOpen: true,
       mode: 'forward',
       to: '',
+      cc: '',
+      bcc: '',
       subject: email.subject.startsWith('Fwd:') ? email.subject : `Fwd: ${email.subject}`,
       body: `\n\n---------- Forwarded Message ----------\nFrom: ${email.fromName || email.from}\nDate: ${email.date}\nSubject: ${email.subject}\nTo: ${email.to.join(', ')}\n\n`,
       originalEmail: email,
@@ -217,12 +229,12 @@ export function EmailPage() {
   // Send email
   const handleSendEmail = async () => {
     if (!composeState.to.trim()) {
-      alert('Please enter a recipient');
+      showWarning('Please enter a recipient');
       return;
     }
 
     if (!composeState.subject.trim()) {
-      alert('Please enter a subject');
+      showWarning('Please enter a subject');
       return;
     }
 
@@ -231,6 +243,8 @@ export function EmailPage() {
 
       const formData = new FormData();
       formData.append('to', composeState.to);
+      formData.append('cc', composeState.cc);
+      formData.append('bcc', composeState.bcc);
       formData.append('subject', composeState.subject);
       formData.append('body', composeState.body);
       formData.append('html', 'false');
@@ -248,16 +262,18 @@ export function EmailPage() {
           isOpen: false,
           mode: 'compose',
           to: '',
+          cc: '',
+          bcc: '',
           subject: '',
           body: '',
         });
-        alert('Email sent successfully!');
+        showSuccess('Email sent successfully!');
       } else {
-        alert(`Failed to send email: ${data.detail || data.message}`);
+        showError(`Failed to send email: ${data.detail || data.message}`);
       }
     } catch (error) {
       console.error('Failed to send email:', error);
-      alert('Failed to send email');
+      showError('Failed to send email');
     } finally {
       setSendingEmail(false);
     }
@@ -376,7 +392,15 @@ export function EmailPage() {
           <button
             className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 shadow-sm transition-colors font-medium"
             onClick={() => {
-              /* TODO: Implement compose */
+              setComposeState({
+                isOpen: true,
+                mode: 'compose',
+                to: '',
+                cc: '',
+                bcc: '',
+                subject: '',
+                body: '',
+              });
             }}
           >
             <FileText className="w-5 h-5" />
@@ -406,10 +430,15 @@ export function EmailPage() {
                       setSelectedFolder(folderState.name);
                       setFilter('all');
                     }}
+                    disabled={folderState.loadStatus !== 'loaded' && folderState.loadStatus !== 'loading'}
                     className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       selectedFolder === folderState.name
                         ? 'bg-primary-100 text-primary-700'
                         : 'text-gray-700 hover:bg-gray-100'
+                    } ${
+                      folderState.loadStatus !== 'loaded' && folderState.loadStatus !== 'loading'
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
                     }`}
                   >
                     {getFolderIcon(folderState)}
@@ -616,11 +645,11 @@ export function EmailPage() {
             </div>
           ) : (
             // Email list
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-gray-200 w-full overflow-hidden">
               {filteredEmails.map((email) => (
                 <div
                   key={email.uid}
-                  className={`bg-white hover:bg-gray-50 transition-colors ${
+                  className={`w-full overflow-hidden bg-white hover:bg-gray-50 transition-colors ${
                     email.isUnread ? 'bg-white' : 'bg-gray-50/50'
                   }`}
                 >
@@ -737,7 +766,7 @@ export function EmailPage() {
 
                   {/* Expanded content */}
                   {expandedEmail === email.uid && (
-                    <div className="border-t border-gray-200 p-4 bg-gray-50">
+                    <div className="border-t border-gray-200 p-4 bg-gray-50 w-full overflow-hidden">
                       <div className="mb-4 text-sm">
                         <div className="grid grid-cols-[100px_1fr] gap-2">
                           <span className="font-medium text-gray-700">From:</span>
@@ -750,9 +779,9 @@ export function EmailPage() {
                       </div>
 
                       {/* Email body - render HTML content safely */}
-                      <div className="mb-4">
+                      <div className="mb-4 overflow-hidden w-full">
                         <div
-                          className="email-body-content text-gray-800 bg-white p-4 rounded border border-gray-200"
+                          className="email-body-content w-full overflow-hidden"
                           dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.body) }}
                         />
                       </div>
@@ -849,6 +878,34 @@ export function EmailPage() {
                     onChange={(e) => setComposeState({ ...composeState, to: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="recipient@example.com"
+                  />
+                </div>
+
+                {/* CC Field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CC:
+                  </label>
+                  <input
+                    type="text"
+                    value={composeState.cc}
+                    onChange={(e) => setComposeState({ ...composeState, cc: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="cc@example.com"
+                  />
+                </div>
+
+                {/* BCC Field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    BCC:
+                  </label>
+                  <input
+                    type="text"
+                    value={composeState.bcc}
+                    onChange={(e) => setComposeState({ ...composeState, bcc: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="bcc@example.com"
                   />
                 </div>
 
