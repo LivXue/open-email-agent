@@ -2,7 +2,7 @@
 
   # 📧 MailMind
 
-  ### 您的邮件系统终于可以为您工作了！
+  ### 你的电子邮件终于可以自己工作了！
 
   ![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)
   ![Status](https://img.shields.io/badge/status-beta-orange.svg)
