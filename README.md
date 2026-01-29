@@ -24,9 +24,9 @@
 
 <div align="center">
 
-## 🎉 What's New in v0.0.2
+## 🎉 What's New in v0.0.3
 
-### ✨ Emails Page - Complete Overhaul
+### ✨ Emails Page - Improved Rendering
 
 We've completely redesigned the Emails page with a modern, feature-rich email client interface.
 

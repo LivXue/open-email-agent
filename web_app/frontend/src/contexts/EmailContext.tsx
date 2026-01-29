@@ -50,6 +50,7 @@ interface EmailContextType {
   updateFolderState: (folderName: string, updates: Partial<FolderState>) => void;
   updateEmailAcrossFolders: (emailUid: number, updateFn: (email: EmailData) => EmailData) => void;
   removeEmailFromFolders: (emailUid: number) => void;
+  moveEmailToFolder: (emailUid: number, targetFolder: string) => void;
   isInitialized: boolean;
   isLoading: boolean;
 }
@@ -301,6 +302,73 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Move an email to a different folder
+  const moveEmailToFolder = (emailUid: number, targetFolder: string) => {
+    console.log('[EmailContext] Moving email', emailUid, 'to folder', targetFolder);
+
+    setFolderStates(prev => {
+      const newStates = { ...prev };
+      let emailToMove: EmailData | null = null;
+
+      // Step 1: Find and remove email from all folders
+      Object.keys(newStates).forEach(folderName => {
+        const folder = newStates[folderName];
+        const emailIndex = folder.emails.findIndex(email => email.uid === emailUid);
+
+        if (emailIndex !== -1) {
+          // Found the email, save it
+          emailToMove = { ...folder.emails[emailIndex] };
+
+          // Remove from current folder
+          const filteredEmails = folder.emails.filter(email => email.uid !== emailUid);
+
+          // Update unread count
+          const unreadCount = filteredEmails.filter(e => e.isUnread).length;
+
+          newStates[folderName] = {
+            ...folder,
+            emails: filteredEmails,
+            unreadCount: unreadCount,
+            totalCount: filteredEmails.length,
+          };
+        }
+      });
+
+      // Step 2: Add email to target folder if it exists
+      if (emailToMove && newStates[targetFolder]) {
+        console.log('[EmailContext] Adding email to target folder:', targetFolder);
+
+        const targetFolderState = newStates[targetFolder];
+        const updatedEmails = [...targetFolderState.emails, emailToMove];
+
+        // Sort by date (newest first) - parse date string
+        updatedEmails.sort((a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateB - dateA; // Newest first
+        });
+
+        // Update unread count
+        const unreadCount = updatedEmails.filter(e => e.isUnread).length;
+
+        newStates[targetFolder] = {
+          ...targetFolderState,
+          emails: updatedEmails,
+          unreadCount: unreadCount,
+          totalCount: updatedEmails.length,
+        };
+
+        console.log('[EmailContext] Email added. Folder now has', updatedEmails.length, 'emails');
+      } else if (!emailToMove) {
+        console.warn('[EmailContext] Email not found in any folder:', emailUid);
+      } else if (!newStates[targetFolder]) {
+        console.warn('[EmailContext] Target folder not found in state:', targetFolder);
+      }
+
+      return newStates;
+    });
+  };
+
   const value: EmailContextType = {
     folderStates,
     initializeEmails,
@@ -309,6 +377,7 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     updateFolderState,
     updateEmailAcrossFolders,
     removeEmailFromFolders,
+    moveEmailToFolder,
     isInitialized,
     isLoading,
   };

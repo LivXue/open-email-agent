@@ -11,7 +11,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from datetime import datetime, UTC
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -948,56 +948,123 @@ async def delete_email_endpoint(
 @app.post("/api/emails/{email_uid}/move")
 async def move_email_endpoint(
     email_uid: str,
-    destination_folder: str
+    destination_folder: str = Query(..., description="Destination folder name")
 ):
     """Move an email to a different folder."""
-    try:
-        if not email_tools_module.mailbox:
-            raise HTTPException(
-                status_code=503,
-                detail="Email service not connected. Please check your email configuration."
-            )
+    import sys
+    from lib.email_utils import MailBoxClient
 
+    print(f"[Move Email] ===== MOVE EMAIL REQUEST START =====", file=sys.stderr)
+    print(f"[Move Email] email_uid: {email_uid!r}", file=sys.stderr)
+    print(f"[Move Email] destination_folder: {destination_folder!r}", file=sys.stderr)
+
+    # Email configuration from email_tools module
+    imap_server = email_tools_module.imap_server
+    imap_port = email_tools_module.imap_port
+    email = email_tools_module.email
+    password = email_tools_module.password
+    proxy = email_tools_module.proxy
+
+    mailbox = None
+
+    try:
         # Validate UID is a number (keep as string for imap_tools)
         try:
             int(email_uid)
+            print(f"[Move Email] UID validation passed: {email_uid}", file=sys.stderr)
         except ValueError:
+            print(f"[Move Email] ERROR: Invalid UID format: {email_uid}", file=sys.stderr)
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid email UID: {email_uid}. Must be a number."
             )
 
-        # Get the mailbox
-        mailbox = email_tools_module.mailbox
+        # Create a fresh mailbox connection for this operation
+        print(f"[Move Email] Creating fresh IMAP connection...", file=sys.stderr)
+        try:
+            mailbox = MailBoxClient(
+                host=imap_server,
+                port=imap_port,
+                timeout=30,
+                proxy=proxy
+            ).login(email, password)
+            print(f"[Move Email] Successfully connected to IMAP server", file=sys.stderr)
+        except Exception as connect_error:
+            print(f"[Move Email] Failed to connect: {connect_error}", file=sys.stderr)
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to connect to email server: {connect_error}"
+            )
+
+        # List all folders
+        print(f"[Move Email] Listing folders...", file=sys.stderr)
+        try:
+            all_folders = [f.name for f in mailbox.folder.list()]
+            print(f"[Move Email] Found {len(all_folders)} folders", file=sys.stderr)
+        except Exception as list_error:
+            print(f"[Move Email] Failed to list folders: {list_error}", file=sys.stderr)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to list folders: {list_error}"
+            )
 
         # Check if destination folder exists
-        all_folders = [f.name for f in mailbox.folder.list()]
-
-        # Handle Gmail folder naming
+        print(f"[Move Email] Checking if destination folder '{destination_folder}' exists...", file=sys.stderr)
         target_folder = destination_folder
         if destination_folder not in all_folders:
+            print(f"[Move Email] Folder '{destination_folder}' not in basic list", file=sys.stderr)
             if "[Gmail]/" + destination_folder in all_folders:
                 target_folder = "[Gmail]/" + destination_folder
+                print(f"[Move Email] Using Gmail prefix: {target_folder}", file=sys.stderr)
             else:
+                print(f"[Move Email] ERROR: Folder not found. Available: {all_folders[:10]}", file=sys.stderr)
                 raise HTTPException(
                     status_code=404,
                     detail=f"Folder '{destination_folder}' not found. Available folders: {', '.join(all_folders)}"
                 )
+        else:
+            print(f"[Move Email] Folder found: {target_folder}", file=sys.stderr)
 
         # Move the email using imap_tools (UID should be string)
-        mailbox.move([email_uid], target_folder)
+        print(f"[Move Email] Attempting to move email {email_uid} to '{target_folder}'...", file=sys.stderr)
+        try:
+            mailbox.move([email_uid], target_folder)
+            print(f"[Move Email] Move operation completed successfully!", file=sys.stderr)
+        except Exception as move_error:
+            print(f"[Move Email] Move operation failed: {move_error}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to move email: {move_error}"
+            )
 
-        return {
+        result = {
             "status": "success",
             "message": f"Email #{email_uid} moved to '{target_folder}' successfully!"
         }
+        print(f"[Move Email] Returning success response", file=sys.stderr)
+        print(f"[Move Email] ===== MOVE EMAIL REQUEST END =====", file=sys.stderr)
+        return result
 
     except HTTPException:
+        print(f"[Move Email] HTTPException raised", file=sys.stderr)
         raise
     except Exception as e:
         import traceback
+        print(f"[Move Email] Unexpected exception: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         error_detail = f"{str(e)}\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_detail)
+    finally:
+        # Always logout and cleanup the mailbox connection
+        if mailbox:
+            try:
+                print(f"[Move Email] Cleaning up mailbox connection...", file=sys.stderr)
+                mailbox.logout()
+                print(f"[Move Email] Mailbox connection closed", file=sys.stderr)
+            except:
+                pass
 
 
 @app.post("/api/emails/send")

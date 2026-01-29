@@ -8,7 +8,6 @@ import {
   Filter,
   Star,
   StarIcon,
-  Archive,
   Trash2,
   Folder,
   ChevronDown,
@@ -342,6 +341,7 @@ export function EmailPage() {
     reloadFolder,
     updateEmailAcrossFolders,
     removeEmailFromFolders,
+    moveEmailToFolder,
     isLoading,
   } = useEmailContext();
 
@@ -366,6 +366,18 @@ export function EmailPage() {
   });
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
   const [copiedEmailUid, setCopiedEmailUid] = useState<number | null>(null);
+
+  // Move to folder modal state
+  const [moveFolderState, setMoveFolderState] = useState<{
+    isOpen: boolean;
+    emailUid: number | null;
+    selectedFolder: string;
+  }>({
+    isOpen: false,
+    emailUid: null,
+    selectedFolder: '',
+  });
+  const [movingEmail, setMovingEmail] = useState<boolean>(false);
 
   // Copy raw email content to clipboard
   const handleCopyRawContent = async (email: EmailData) => {
@@ -474,37 +486,68 @@ export function EmailPage() {
     });
   };
 
-  // Archive email (move to Archive folder or INBOX.Archive)
-  const handleArchive = async (emailUid: number) => {
+  // Open move to folder modal
+  const handleOpenMoveFolder = (emailUid: number) => {
+    setMoveFolderState({
+      isOpen: true,
+      emailUid: emailUid,
+      selectedFolder: '',
+    });
+  };
+
+  // Move email to selected folder
+  const handleMoveToFolder = async () => {
+    const { emailUid, selectedFolder } = moveFolderState;
+
+    console.log('[Move Email] Starting move operation:', { emailUid, selectedFolder });
+
+    if (!emailUid || !selectedFolder) {
+      showWarning('Please select a folder');
+      return;
+    }
+
     try {
-      // Try common archive folder names
-      const archiveFolders = ['Archive', 'INBOX.Archive', 'Archives', 'All Mail'];
-      const availableFolders = Object.keys(folderStates);
+      setMovingEmail(true);
 
-      // Find the first available archive folder
-      let targetFolder = archiveFolders.find(f => availableFolders.includes(f));
+      const url = `${API_BASE}/api/emails/${emailUid}/move?destination_folder=${encodeURIComponent(selectedFolder)}`;
+      console.log('[Move Email] Sending request to:', url);
 
-      if (!targetFolder) {
-        alert('No Archive folder found. Please create an Archive folder in your email client.');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[Move Email] Response status:', response.status);
+      console.log('[Move Email] Response ok:', response.ok);
+
+      // Check if response is ok
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        console.error('[Move Email] Error response:', errorData);
+        showError(errorData.detail || `Failed to move email (HTTP ${response.status})`);
         return;
       }
 
-      const response = await fetch(`${API_BASE}/api/emails/${emailUid}/move?destination_folder=${encodeURIComponent(targetFolder)}`, {
-        method: 'POST',
-      });
-
       const data = await response.json();
+      console.log('[Move Email] Success response:', data);
 
       if (data.status === 'success') {
-        // Remove from local state across all folders
-        removeEmailFromFolders(emailUid);
+        // Move email to target folder in local state
+        moveEmailToFolder(emailUid, selectedFolder);
         setExpandedEmail(null);
+        setMoveFolderState({ isOpen: false, emailUid: null, selectedFolder: '' });
+        showSuccess(`Email moved to ${selectedFolder}`);
       } else {
-        setErrorMessage(data.detail || 'Failed to archive email');
+        showError(data.detail || 'Failed to move email');
       }
     } catch (error) {
-      console.error('Failed to archive email:', error);
-      setErrorMessage('Failed to archive email');
+      console.error('[Move Email] Exception caught:', error);
+      showError('Failed to move email. Please try again.');
+    } finally {
+      setMovingEmail(false);
+      console.log('[Move Email] Move operation completed');
     }
   };
 
@@ -1049,18 +1092,25 @@ export function EmailPage() {
                   {/* Expanded content */}
                   {expandedEmail === email.uid && (
                     <div className="border-t border-gray-200 p-3 bg-gray-50 w-full overflow-hidden">
-                      <div className="mb-2 text-sm space-y-1">
+                      {/* Email headers - centered alignment with body */}
+                      <div
+                        className="mb-2 text-sm w-full bg-white rounded-lg p-3 shadow-sm border border-gray-100"
+                        style={{
+                          maxWidth: `${getEmailOptimalWidth(email.body)}px`,
+                          margin: '0 auto',
+                        }}
+                      >
                         <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">From:</span>
-                          <span className="text-gray-900 break-all">{email.fromName || email.from}</span>
+                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">From:</span>
+                          <span className="text-gray-900 break-all flex-1">{email.fromName || email.from}</span>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">To:</span>
-                          <span className="text-gray-900 break-all">{email.to.join(', ')}</span>
+                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">To:</span>
+                          <span className="text-gray-900 break-all flex-1">{email.to.join(', ')}</span>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">Date:</span>
-                          <span className="text-gray-900 break-all">{email.date}</span>
+                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">Date:</span>
+                          <span className="text-gray-900 break-all flex-1">{email.date}</span>
                         </div>
                       </div>
 
@@ -1091,7 +1141,7 @@ export function EmailPage() {
                           {/* Email content or empty state message */}
                           {email.body && email.body.trim() ? (
                             <div
-                              className="email-body-content w-full bg-white rounded-lg p-3"
+                              className="email-body-content w-full bg-white rounded-lg p-3 shadow-sm border border-gray-100"
                               style={{
                                 maxWidth: `${getEmailOptimalWidth(email.body)}px`,
                                 margin: '0 auto',
@@ -1193,10 +1243,10 @@ export function EmailPage() {
                         </button>
                         <button
                           className="px-4 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                          onClick={() => handleArchive(email.uid)}
+                          onClick={() => handleOpenMoveFolder(email.uid)}
                         >
-                          <Archive className="w-4 h-4 inline mr-1" />
-                          Archive
+                          <Folder className="w-4 h-4 inline mr-1" />
+                          Move to
                         </button>
                         <button
                           className="px-4 py-2 text-sm bg-white border border-gray-300 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors font-medium"
@@ -1331,6 +1381,81 @@ export function EmailPage() {
                   <>
                     <Send className="w-4 h-4" />
                     Send
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move to Folder Modal */}
+      {moveFolderState.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col mx-4">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+              <h3 className="text-lg font-semibold text-gray-900">Move to</h3>
+              <button
+                onClick={() => setMoveFolderState({ isOpen: false, emailUid: null, selectedFolder: '' })}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Destination Folder:
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {Object.keys(folderStates).map((folder) => (
+                      <button
+                        key={folder}
+                        onClick={() => setMoveFolderState({ ...moveFolderState, selectedFolder: folder })}
+                        className={`w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-center gap-3 ${
+                          moveFolderState.selectedFolder === folder
+                            ? 'bg-primary-50 border-primary-500 text-primary-700'
+                            : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <Folder className="w-5 h-5 flex-shrink-0" />
+                        <span className="font-medium">{folder}</span>
+                        {moveFolderState.selectedFolder === folder && (
+                          <CheckCircle2 className="w-5 h-5 ml-auto text-primary-600" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setMoveFolderState({ isOpen: false, emailUid: null, selectedFolder: '' })}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMoveToFolder}
+                disabled={!moveFolderState.selectedFolder || movingEmail}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {movingEmail ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Moving...
+                  </>
+                ) : (
+                  <>
+                    <Folder className="w-4 h-4" />
+                    Move
                   </>
                 )}
               </button>

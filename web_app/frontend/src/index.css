@@ -64,7 +64,6 @@ body {
   word-wrap: break-word;
   word-break: break-word;
   /* ISOLATION: Prevent email styles from leaking to global */
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
   font-size: 14px !important;
   line-height: 1.6 !important;
   color: #1f2937 !important;
@@ -89,7 +88,6 @@ body {
 .email-body-content *,
 .email-body-content *::before,
 .email-body-content *::after {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
   box-sizing: border-box;
 }
 
@@ -110,7 +108,6 @@ body {
 .email-body-content table,
 .email-body-content td,
 .email-body-content th {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
   max-width: 100%;
   overflow-wrap: break-word;
   word-wrap: break-word;
