@@ -13,6 +13,9 @@ export interface EmailData {
   to: string[];
   date: string;
   body: string;
+  html: string;  // Original HTML content
+  text: string;  // Original plain text content
+  raw: string;  // Complete RFC822 raw email with headers
   preview: string;
   isUnread: boolean;
   isFlagged: boolean;

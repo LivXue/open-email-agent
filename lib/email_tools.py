@@ -24,10 +24,10 @@ EMAILS_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', '.emails_cache
 email = os.getenv("USERNAME")
 password = os.getenv("PASSWORD")
 imap_server = os.getenv("IMAP_SERVER")
-imap_port = int(os.getenv("IMAP_PORT"))
+imap_port = int(os.getenv("IMAP_PORT", "993"))
 imap_use_proxy = os.getenv("IMAP_USE_PROXY", "False").lower() == "true"
 smtp_server = os.getenv("SMTP_SERVER")
-smtp_port = int(os.getenv("SMTP_PORT"))
+smtp_port = int(os.getenv("SMTP_PORT", "465"))
 smtp_use_ssl = os.getenv("SMTP_USE_SSL", "True").lower() == "true"
 smtp_use_proxy = os.getenv("SMTP_USE_PROXY", "False").lower() == "true"
 dont_set_read = os.getenv("DONT_SET_READ", "False").lower() == "true"
@@ -421,11 +421,11 @@ def delete_email(email_index: Optional[int] = None, email_uid: Optional[str] = N
         elif email_uid is not None:
             # Convert email_uid to int for comparison with email.uid (which is an integer from imap_tools)
             try:
-                email_uid_int = int(email_uid)
+                int(email_uid)
             except (ValueError, TypeError):
                 return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
 
-            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid_int), None)
+            email_index = next((idx for idx, email in enumerate(cache, 1) if email is not None and email.uid == email_uid), None)
             if email_index is None:
                 return f"Error: Email with UID {email_uid} not found. The email may have already been deleted."
         else:
@@ -482,7 +482,7 @@ def move_email(
         # Convert email_uid to int if provided
         if email_uid is not None:
             try:
-                email_uid_int = int(email_uid)
+                int(email_uid)
             except (ValueError, TypeError):
                 return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
 
@@ -490,28 +490,27 @@ def move_email(
             email_to_move = cache[email_index - 1]
             if email_to_move is None:
                 return f"Error: Email #{email_index} has already been deleted."
-            email_uid_int = email_to_move.uid
+            email_uid = str(email_to_move.uid)
 
         # If email_uid is provided directly, use it without cache lookup
-        # If email_index is provided, email_uid_int is already set above
-        if email_uid_int is None:
+        if email_uid is None:
             return "Error: Either email_index or email_uid must be provided."
 
         # Move the email
-        mailbox.move(email_uid_int, destination_folder)
+        mailbox.move(email_uid, destination_folder)
 
         # Mark as deleted in cache if we have an index
         if email_index is not None:
             cache[email_index - 1] = None
             return f"Email #{email_index} moved successfully to '{destination_folder}'!"
         else:
-            return f"Email with UID {email_uid_int} moved successfully to '{destination_folder}'!"
+            return f"Email with UID {email_uid} moved successfully to '{destination_folder}'!"
 
     except Exception as e:
         if email_index is not None:
             return f"Failed to move email #{email_index}: {str(e)}"
         else:
-            return f"Failed to move email with UID {email_uid_int}: {str(e)}"
+            return f"Failed to move email with UID {email_uid}: {str(e)}"
 
 
 @tool
@@ -555,7 +554,7 @@ def flag_email(
         # Convert email_uid to int if provided as string
         if email_uid is not None:
             try:
-                email_uid_int = int(email_uid)
+                int(email_uid)
             except (ValueError, TypeError):
                 return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
 
@@ -563,12 +562,7 @@ def flag_email(
             email_to_flag = cache[email_index - 1]
             if email_to_flag is None:
                 return f"Error: Email #{email_index} has already been deleted."
-            email_uid_int = email_to_flag.uid
-
-        # If email_uid is provided directly, use it without cache lookup
-        # If email_index is provided, email_uid_int is already set above
-        if email_uid_int is None:
-            return "Error: Either email_index or email_uid must be provided."
+            email_uid = email_to_flag.uid
 
         # Map flag_type to IMAP flag name
         flag_type_lower = flag_type.lower()
@@ -588,19 +582,19 @@ def flag_email(
             return f"Error: Invalid flag_type '{flag_type}'. Valid options: 'seen/read', 'flagged/important/starred', 'answered', 'draft'."
 
         # Set the flag
-        mailbox.flag.set([email_uid_int], imap_flag, value)
+        mailbox.flag.set([email_uid], imap_flag, value)
 
         # Return success message
         if email_index is not None:
             return f"Email #{email_index} {action_desc}!"
         else:
-            return f"Email with UID {email_uid_int} {action_desc}!"
+            return f"Email with UID {email_uid} {action_desc}!"
 
     except Exception as e:
         if email_index is not None:
             return f"Failed to set flag for email #{email_index}: {str(e)}"
         else:
-            return f"Failed to set flag for email with UID {email_uid_int}: {str(e)}"
+            return f"Failed to set flag for email with UID {email_uid}: {str(e)}"
 
 
 @tool
@@ -665,7 +659,7 @@ def download_attachments(
         # Convert email_uid to int if provided
         if email_uid is not None:
             try:
-                email_uid_int = int(email_uid)
+                int(email_uid)
             except (ValueError, TypeError):
                 return f"Error: Invalid email_uid '{email_uid}'. Must be a number."
 
@@ -676,7 +670,7 @@ def download_attachments(
         elif email_uid is not None:
             # If only email_uid is provided, fetch the email from server
             # This is slower but necessary when email is not in cache
-            for msg in mailbox.fetch(criteria=Uid(email_uid_int)):
+            for msg in mailbox.fetch(criteria=AND(uid=email_uid)):
                 email_obj = msg
                 break
             if email_obj is None:
@@ -694,7 +688,7 @@ def download_attachments(
             if email_index is not None:
                 return f"Email #{email_index} has no attachments."
             else:
-                return f"Email with UID {email_uid_int} has no attachments."
+                return f"Email with UID {email_uid} has no attachments."
 
         downloaded_files = []
         for attachment in email_obj.attachments:
@@ -712,13 +706,13 @@ def download_attachments(
         if email_index is not None:
             return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email #{email_index}:\n" + "\n".join(downloaded_files)
         else:
-            return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email with UID {email_uid_int}:\n" + "\n".join(downloaded_files)
+            return f"Successfully downloaded {len(downloaded_files)} attachment(s) from email with UID {email_uid}:\n" + "\n".join(downloaded_files)
 
     except Exception as e:
         if email_index is not None:
             return f"Failed to download attachments from email #{email_index}: {str(e)}"
         else:
-            return f"Failed to download attachments from email with UID {email_uid_int}: {str(e)}"
+            return f"Failed to download attachments from email with UID {email_uid}: {str(e)}"
 
 def get_current_time_str():
     """Get current time string in format 'YYYY-MM-DD HH:MM:SS'."""
@@ -792,36 +786,44 @@ def _modify_address_book_impl(operation: str, id: Optional[str]=None, name: Opti
         assert id, "ID is required for adding emails."
         assert emails, "Emails are required for adding emails."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
+        if "emails" not in address_book_data[id]:
+            address_book_data[id]["emails"] = []
         for email in emails:
-            if email not in address_book_data[id].get("emails", []):
-                address_book_data[id].get("emails", []).append(email)
+            if email not in address_book_data[id]["emails"]:
+                address_book_data[id]["emails"].append(email)
         address_book_data[id]["update_time"] = get_current_time_str()
         result_message = f"Emails {emails} added to person with ID {id}."
     elif operation == "delete_emails":
         assert id, "ID is required for deleting emails."
         assert emails, "Emails are required for deleting emails."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
+        if "emails" not in address_book_data[id]:
+            address_book_data[id]["emails"] = []
         for email in emails:
-            if email in address_book_data[id].get("emails", []):
-                address_book_data[id].get("emails", []).remove(email)
+            if email in address_book_data[id]["emails"]:
+                address_book_data[id]["emails"].remove(email)
         address_book_data[id]["update_time"] = get_current_time_str()
         result_message = f"Emails {emails} deleted from person with ID {id}."
     elif operation == "add_groups":
         assert id, "ID is required for adding groups."
         assert groups, "Groups are required for adding groups."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
+        if "groups" not in address_book_data[id]:
+            address_book_data[id]["groups"] = []
         for group in groups:
-            if group not in address_book_data[id].get("groups", []):
-                address_book_data[id].get("groups", []).append(group)
+            if group not in address_book_data[id]["groups"]:
+                address_book_data[id]["groups"].append(group)
         address_book_data[id]["update_time"] = get_current_time_str()
         result_message = f"Groups {groups} added to person with ID {id}."
     elif operation == "delete_groups":
         assert id, "ID is required for deleting groups."
         assert groups, "Groups are required for deleting groups."
         assert id in address_book_data, f"Error: Person with ID {id} not found."
+        if "groups" not in address_book_data[id]:
+            address_book_data[id]["groups"] = []
         for group in groups:
-            if group in address_book_data[id].get("groups", []):
-                address_book_data[id].get("groups", []).remove(group)
+            if group in address_book_data[id]["groups"]:
+                address_book_data[id]["groups"].remove(group)
         address_book_data[id]["update_time"] = get_current_time_str()
         result_message = f"Groups {groups} deleted from person with ID {id}."
     elif operation == "edit_name":

@@ -50,10 +50,13 @@ echo ""
 # Start backend in background
 cd backend
 if [ -d "venv" ]; then
-    source venv/bin/activate
+    # Use venv Python explicitly to ensure it's activated in background process
+    echo "Starting backend server on http://localhost:$BACKEND_PORT"
+    ./venv/bin/python api_server.py &
+else
+    echo "Starting backend server on http://localhost:$BACKEND_PORT"
+    python api_server.py &
 fi
-echo "Starting backend server on http://localhost:$BACKEND_PORT"
-python api_server.py &
 BACKEND_PID=$!
 cd ..
 

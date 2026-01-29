@@ -64,20 +64,19 @@ body {
   word-wrap: break-word;
   word-break: break-word;
   /* ISOLATION: Prevent email styles from leaking to global */
-  all: initial;
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
   font-size: 14px !important;
   line-height: 1.6 !important;
   color: #1f2937 !important;
-  display: block;
   box-sizing: border-box;
-  isolation: isolate;
-  contain: layout style;
   /* RESPONSIVE: Ensure content fits within container */
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
+  /* Improve readability */
+  padding: 16px;
+  background-color: #ffffff;
 }
 
 /* Prevent style leakage from email HTML */
@@ -113,7 +112,6 @@ body {
 .email-body-content th {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif !important;
   max-width: 100%;
-  font-size: inherit !important;
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
@@ -131,8 +129,8 @@ body {
 .email-body-content h4,
 .email-body-content h5,
 .email-body-content h6 {
-  margin-top: 1em;
-  margin-bottom: 0.5em;
+  margin-top: 0.5em;
+  margin-bottom: 0.3em;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -143,7 +141,7 @@ body {
 
 .email-body-content p {
   margin-top: 0;
-  margin-bottom: 1em;
+  margin-bottom: 0.5em;
 }
 
 .email-body-content a {
@@ -159,28 +157,31 @@ body {
 .email-body-content ul,
 .email-body-content ol {
   margin-top: 0;
-  margin-bottom: 1em;
+  margin-bottom: 0.5em;
   padding-left: 2em;
+  line-height: 1.4;
 }
 
 .email-body-content li {
-  margin-bottom: 0.25em;
+  margin-bottom: 0.1em;
+  line-height: 1.4;
+  padding-top: 0.1em;
+  padding-bottom: 0.1em;
 }
 
-/* Email body tables - Remove borders for cleaner look */
+/* Email body tables - Responsive and styled */
 .email-body-content table {
   border-collapse: collapse;
   width: 100%;
   max-width: 100%;
-  margin-bottom: 1em;
-  table-layout: auto;
+  margin-bottom: 0.5em;
+  table-layout: fixed;
   overflow-wrap: break-word;
 }
 
 .email-body-content th,
 .email-body-content td {
-  border: none;
-  padding: 0.5em;
+  padding: 0.75em;
   text-align: left;
   max-width: 100%;
   overflow-wrap: break-word;
@@ -189,8 +190,14 @@ body {
 }
 
 .email-body-content th {
-  background-color: transparent;
   font-weight: 600;
+  color: #374151;
+}
+
+/* Responsive table behavior */
+.email-body-content table[width] {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* Email body images */
@@ -198,14 +205,13 @@ body {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 1em 0;
+  margin: 0.5em 0;
 }
 
 /* Email body blockquotes */
 .email-body-content blockquote {
-  margin: 1em 0;
+  margin: 0.5em 0;
   padding-left: 1em;
-  border-left: 4px solid #d1d5db;
   color: #6b7280;
   font-style: italic;
 }
@@ -214,7 +220,6 @@ body {
 .email-body-content code {
   background-color: #f3f4f6;
   padding: 0.2em 0.4em;
-  border-radius: 3px;
   font-family: monospace;
   font-size: 0.9em;
 }
@@ -222,9 +227,8 @@ body {
 .email-body-content pre {
   background-color: #f3f4f6;
   padding: 1em;
-  border-radius: 6px;
   overflow-x: auto;
-  margin-bottom: 1em;
+  margin-bottom: 0.5em;
 }
 
 .email-body-content pre code {
@@ -235,8 +239,7 @@ body {
 /* Email body dividers */
 .email-body-content hr {
   border: none;
-  border-top: 1px solid #d1d5db;
-  margin: 2em 0;
+  margin: 1em 0;
 }
 
 /* Email body strong/bold and italic */
@@ -261,5 +264,117 @@ body {
 .email-body-content * {
   max-width: 100%;
   box-sizing: border-box;
+}
+
+/* Handle email-specific problematic elements */
+.email-body-content td,
+.email-body-content th {
+  min-width: 50px;
+}
+
+/* Fix for nested tables in emails */
+.email-body-content table table {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Improve paragraph spacing */
+.email-body-content p + p {
+  margin-top: 0.5em;
+}
+
+/* Better link styling */
+.email-body-content a {
+  color: #2563eb;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.email-body-content a:hover {
+  color: #1d4ed8;
+  border-bottom-color: #1d4ed8;
+}
+
+/* Handle preformatted text better */
+.email-body-content pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Improve image handling */
+.email-body-content img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  margin: 0.5em 0;
+}
+
+/* Responsive containers */
+.email-body-content div[style*="width"] {
+  max-width: 100% !important;
+  width: auto !important;
+}
+
+/* Handle email body wrapper divs */
+.email-body-content > div {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Improve center alignment for wide content */
+.email-body-content table[align="center"],
+.email-body-content div[align="center"],
+.email-body-content p[align="center"],
+.email-body-content img[align="center"],
+.email-body-content td[align="center"],
+.email-body-content th[align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.email-body-content td[align="center"],
+.email-body-content th[align="center"] {
+  text-align: center;
+}
+
+/* Responsive scale transform for oversized content */
+@media (max-width: 768px) {
+  .email-body-content {
+    font-size: 13px !important;
+    padding: 12px;
+  }
+
+  .email-body-content table {
+    font-size: 13px !important;
+  }
+
+  .email-body-content td,
+  .email-body-content th {
+    padding: 0.5em !important;
+    font-size: 13px !important;
+  }
+}
+
+/* Prevent overflow on very small screens */
+@media (max-width: 480px) {
+  .email-body-content {
+    font-size: 12px !important;
+    padding: 8px;
+  }
+
+  .email-body-content img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .email-body-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 

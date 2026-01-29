@@ -20,6 +20,8 @@ import {
   Clock,
   X,
   Send,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useEmailContext, type EmailData, type FolderState } from '../contexts/EmailContext';
 import { useToast } from '../contexts/ToastContext';
@@ -29,31 +31,290 @@ const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT || '2821';
 const API_BASE = `http://localhost:${BACKEND_PORT}`;
 
 /**
- * Sanitize email HTML to prevent style leakage
- * Removes style tags, script tags, and other potentially harmful elements
+ * Detect the optimal width for email content based on its HTML structure
+ * Returns the recommended max-width in pixels
+ */
+function getEmailOptimalWidth(html: string): number {
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  // Check for tables with explicit widths
+  const tables = temp.querySelectorAll('table');
+  let maxTableWidth = 0;
+
+  for (const table of tables) {
+    const widthAttr = table.getAttribute('width');
+    const styleAttr = table.getAttribute('style');
+
+    // Check width attribute
+    if (widthAttr) {
+      if (/^\d+$/.test(widthAttr)) {
+        maxTableWidth = Math.max(maxTableWidth, parseInt(widthAttr));
+      } else if (widthAttr.includes('%')) {
+        // Percentage widths - assume 600px base for 100%
+        const percent = parseInt(widthAttr);
+        if (percent <= 100) {
+          maxTableWidth = Math.max(maxTableWidth, 600);
+        }
+      }
+    }
+
+    // Check style attribute for width
+    if (styleAttr) {
+      const widthMatch = styleAttr.match(/width:\s*(\d+)px/i);
+      if (widthMatch) {
+        maxTableWidth = Math.max(maxTableWidth, parseInt(widthMatch[1]));
+      }
+    }
+  }
+
+  // Check for large images
+  const images = temp.querySelectorAll('img');
+  let maxImageWidth = 0;
+
+  for (const img of images) {
+    const widthAttr = img.getAttribute('width');
+    const styleAttr = img.getAttribute('style');
+
+    if (widthAttr && /^\d+$/.test(widthAttr)) {
+      maxImageWidth = Math.max(maxImageWidth, parseInt(widthAttr));
+    }
+
+    if (styleAttr) {
+      const widthMatch = styleAttr.match(/width:\s*(\d+)px/i);
+      if (widthMatch) {
+        maxImageWidth = Math.max(maxImageWidth, parseInt(widthMatch[1]));
+      }
+    }
+  }
+
+  // Determine optimal width based on content
+  const contentWidth = Math.max(maxTableWidth, maxImageWidth);
+
+  // If content has explicit width, use it (with some padding)
+  if (contentWidth > 0 && contentWidth <= 800) {
+    return contentWidth + 40; // Add padding
+  }
+
+  // Default to 600px for typical email content
+  return 600;
+}
+
+/**
+ * Sanitize and optimize email HTML for display
+ * Removes script tags and external stylesheets, but preserves inline styles for layout
  */
 function sanitizeEmailHtml(html: string): string {
   // Create a temporary DOM element to parse HTML
   const temp = document.createElement('div');
   temp.innerHTML = html;
 
-  // Remove style tags
-  const styleTags = temp.querySelectorAll('style');
-  styleTags.forEach(tag => tag.remove());
-
   // Remove script tags
   const scriptTags = temp.querySelectorAll('script');
   scriptTags.forEach(tag => tag.remove());
 
-  // Remove link tags (stylesheets)
+  // Remove link tags (external stylesheets)
   const linkTags = temp.querySelectorAll('link[rel="stylesheet"]');
   linkTags.forEach(tag => tag.remove());
 
-  // Remove all style attributes from elements
-  const allElements = temp.querySelectorAll('*');
+  // Remove meta tags
+  const metaTags = temp.querySelectorAll('meta');
+  metaTags.forEach(tag => tag.remove());
+
+  // Remove noscript tags
+  const noscriptTags = temp.querySelectorAll('noscript');
+  noscriptTags.forEach(tag => tag.remove());
+
+  // Process images to ensure they don't overflow and icons are properly sized
+  const images = temp.querySelectorAll('img');
+  images.forEach(img => {
+    const widthAttr = img.getAttribute('width');
+    const heightAttr = img.getAttribute('height');
+    const src = img.getAttribute('src') || '';
+    const alt = img.getAttribute('alt') || '';
+    const classAttr = img.getAttribute('class') || '';
+
+    // Parse dimensions
+    const width = widthAttr ? parseInt(widthAttr) : 0;
+    const height = heightAttr ? parseInt(heightAttr) : 0;
+    const maxDim = Math.max(width, height);
+
+    // Detect if this is an avatar/profile photo
+    const isAvatar = (
+      /avatar|profile|photo|headshot|userpic/i.test(src) ||
+      /avatar|profile|photo|headshot|userpic/i.test(alt) ||
+      /avatar|profile|photo|headshot|userpic/i.test(classAttr)
+    );
+
+    // Detect if this is a small UI icon (navigation, buttons, etc.)
+    const isSmallIcon = (
+      maxDim > 0 && maxDim <= 32 ||
+      /icon|button|nav|badge/i.test(src) ||
+      /icon|button|nav|badge/i.test(alt) ||
+      /icon|button|nav/i.test(classAttr)
+    );
+
+    // Detect if this is a logo (brand or company)
+    const isLogo = (
+      /logo|brand/i.test(src) ||
+      /logo|brand/i.test(alt) ||
+      /logo|brand/i.test(classAttr)
+    );
+
+    if (isAvatar) {
+      // For avatars/profile photos
+      img.style.maxWidth = '100px';
+      img.style.maxHeight = '100px';
+      img.style.width = 'auto';
+      img.style.height = 'auto';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '50%';
+    } else if (isSmallIcon) {
+      // For small UI icons
+      img.style.maxWidth = '24px';
+      img.style.maxHeight = '24px';
+      img.style.width = 'auto';
+      img.style.height = 'auto';
+      img.style.objectFit = 'contain';
+    } else if (isLogo) {
+      // For all logos - unified treatment with max height limit
+      // This ensures all logos (LinkedIn, Microsoft, AMD, etc.) are consistent
+      img.style.maxHeight = '40px';
+      img.style.width = 'auto';
+      img.style.height = 'auto';
+      img.style.objectFit = 'contain';
+      img.style.flexShrink = '0';
+    } else {
+      // For regular images
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+    }
+  });
+
+  // Process tables to ensure they don't overflow and reduce excessive spacing
+  const tables = temp.querySelectorAll('table');
+  tables.forEach(table => {
+    // Only set max-width if not already set
+    const existingStyle = table.getAttribute('style') || '';
+    if (!existingStyle.includes('max-width')) {
+      table.style.maxWidth = '100%';
+    }
+  });
+
+  // Process table rows to reduce excessive height/spacing
+  const rows = temp.querySelectorAll('tr');
+  rows.forEach(row => {
+    // Check if row has excessive height from line-height or padding
+    const cells = row.querySelectorAll('td, th');
+    cells.forEach(cell => {
+      // Get computed style to check for excessive padding
+      const padding = cell.getAttribute('padding');
+      if (padding) {
+        const paddingVal = parseInt(padding);
+        if (paddingVal > 12) {
+          cell.setAttribute('padding', '8');
+        }
+      }
+      // Check style attribute for padding
+      const style = cell.getAttribute('style') || '';
+      if (style.includes('padding')) {
+        // Reduce padding values in inline styles
+        const newStyle = style
+          .replace(/padding:\s*(\d+)px/g, (match, val) => {
+            const num = parseInt(val);
+            return num > 12 ? `padding: ${Math.floor(num * 0.5)}px` : match;
+          })
+          .replace(/padding-(top|bottom):\s*(\d+)px/g, (match, dir, val) => {
+            const num = parseInt(val);
+            return num > 8 ? `padding-${dir}: ${Math.floor(num * 0.5)}px` : match;
+          });
+        if (newStyle !== style) {
+          cell.setAttribute('style', newStyle);
+        }
+      }
+    });
+  });
+
+  // Process divs that might have excessive margins
+  const divs = temp.querySelectorAll('div');
+  divs.forEach(div => {
+    const style = div.getAttribute('style') || '';
+    if (style.includes('margin')) {
+      // Reduce margin values
+      const newStyle = style
+        .replace(/margin:\s*(\d+)px/g, (match, val) => {
+          const num = parseInt(val);
+          return num > 16 ? `margin: ${Math.floor(num * 0.5)}px` : match;
+        })
+        .replace(/margin-(top|bottom):\s*(\d+)px/g, (match, dir, val) => {
+          const num = parseInt(val);
+          return num > 8 ? `margin-${dir}: ${Math.floor(num * 0.5)}px` : match;
+        });
+      if (newStyle !== style) {
+        div.setAttribute('style', newStyle);
+      }
+    }
+  });
+
+  // Process all links to open in new tab
+  const links = temp.querySelectorAll('a');
+  links.forEach(link => {
+    // Set target to _blank to open in new tab
+    link.setAttribute('target', '_blank');
+    // Set rel for security
+    link.setAttribute('rel', 'noopener noreferrer');
+  });
+
+  // Process reply/forward email headers to improve visual formatting
+  // Look for common patterns like "From:", "Sent:", "To:", "Subject:" in text
+  const allElements = temp.querySelectorAll('div, p, span, td');
   allElements.forEach(el => {
-    el.removeAttribute('style');
-    el.removeAttribute('class');
+    const text = el.textContent || '';
+    // Check if this element contains email header pattern
+    // Use simpler check - just look for multiple header keywords
+    const hasChineseHeaders = (text.includes('发件人') || text.includes('发送时间')) &&
+                               (text.includes('收件人') || text.includes('主题'));
+    const hasEnglishHeaders = (text.includes('From:') || text.includes('From：')) &&
+                               (text.includes('To:') || text.includes('To：') || text.includes('Sent:') || text.includes('Sent：'));
+
+    if (hasChineseHeaders || hasEnglishHeaders) {
+      // Add styling to make headers more readable
+      // Format headers with line breaks for better readability
+      let formattedHtml = el.innerHTML;
+
+      // Replace Chinese header separators with line breaks (but not before the first one)
+      formattedHtml = formattedHtml
+        .replace(/(发送时间[：:])/g, '<br>$1')
+        .replace(/(收件人[：:])/g, '<br>$1')
+        .replace(/(主题[：:])/g, '<br>$1');
+
+      // Replace English header separators with line breaks (but not before the first one)
+      formattedHtml = formattedHtml
+        .replace(/(Sent[：:])/gi, '<br>$1')
+        .replace(/(To[：:])/gi, '<br>$1')
+        .replace(/(Subject[：:])/gi, '<br>$1');
+
+      // Only update if we actually made changes
+      if (formattedHtml !== el.innerHTML) {
+        el.innerHTML = formattedHtml;
+        el.style.borderLeft = '3px solid #e5e7eb';
+        el.style.paddingLeft = '12px';
+        el.style.marginLeft = '0';
+        el.style.marginTop = '12px';
+        el.style.marginBottom = '12px';
+        el.style.color = '#6b7280';
+        el.style.fontSize = '14px';
+        el.style.lineHeight = '1.5';
+      }
+    }
+  });
+
+  // Process horizontal rules or separator lines
+  const hrs = temp.querySelectorAll('hr');
+  hrs.forEach(hr => {
+    hr.style.border = 'none';
+    hr.style.borderTop = '1px solid #e5e7eb';
+    hr.style.margin = '16px 0';
   });
 
   return temp.innerHTML;
@@ -104,6 +365,27 @@ export function EmailPage() {
     body: '',
   });
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
+  const [copiedEmailUid, setCopiedEmailUid] = useState<number | null>(null);
+
+  // Copy raw email content to clipboard
+  const handleCopyRawContent = async (email: EmailData) => {
+    try {
+      // Copy complete RFC822 raw email (including all headers and body)
+      // This is the original email as received from IMAP server
+      const rawContent = email.raw || email.html || email.text || '';
+      await navigator.clipboard.writeText(rawContent);
+      setCopiedEmailUid(email.uid);
+      showSuccess('Raw RFC822 email content copied to clipboard');
+
+      // Reset the copied state after 2 seconds
+      setTimeout(() => {
+        setCopiedEmailUid(null);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      showError('Failed to copy email content');
+    }
+  };
 
   // Flag email (mark as read/unread or star/unstar)
   const flagEmail = async (emailUid: number, flagType: string, value: boolean) => {
@@ -766,29 +1048,117 @@ export function EmailPage() {
 
                   {/* Expanded content */}
                   {expandedEmail === email.uid && (
-                    <div className="border-t border-gray-200 p-4 bg-gray-50 w-full overflow-hidden">
-                      <div className="mb-4 text-sm">
-                        <div className="grid grid-cols-[100px_1fr] gap-2">
-                          <span className="font-medium text-gray-700">From:</span>
-                          <span className="text-gray-900">{email.fromName || email.from}</span>
-                          <span className="font-medium text-gray-700">To:</span>
-                          <span className="text-gray-900">{email.to.join(', ')}</span>
-                          <span className="font-medium text-gray-700">Date:</span>
-                          <span className="text-gray-900">{email.date}</span>
+                    <div className="border-t border-gray-200 p-3 bg-gray-50 w-full overflow-hidden">
+                      <div className="mb-2 text-sm space-y-1">
+                        <div className="flex items-start gap-2">
+                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">From:</span>
+                          <span className="text-gray-900 break-all">{email.fromName || email.from}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">To:</span>
+                          <span className="text-gray-900 break-all">{email.to.join(', ')}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="font-medium text-gray-700 flex-shrink-0 w-12">Date:</span>
+                          <span className="text-gray-900 break-all">{email.date}</span>
                         </div>
                       </div>
 
                       {/* Email body - render HTML content safely */}
-                      <div className="mb-4 overflow-hidden w-full">
-                        <div
-                          className="email-body-content w-full overflow-hidden"
-                          dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.body) }}
-                        />
+                      <div className="mb-2 w-full">
+                        <div className="relative group">
+                          {/* Copy raw content button */}
+                          {email.body && email.body.trim() && (
+                            <button
+                              onClick={() => handleCopyRawContent(email)}
+                              className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-3 py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-xs font-medium rounded-md shadow-lg flex items-center gap-1.5"
+                              title="Copy raw HTML content"
+                            >
+                              {copiedEmailUid === email.uid ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  Copy Raw
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {/* Email content or empty state message */}
+                          {email.body && email.body.trim() ? (
+                            <div
+                              className="email-body-content w-full bg-white rounded-lg p-3"
+                              style={{
+                                maxWidth: `${getEmailOptimalWidth(email.body)}px`,
+                                margin: '0 auto',
+                              }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.body) }}
+                            />
+                          ) : (
+                            <div className="email-body-content w-full bg-white rounded-lg p-6 text-center text-gray-500">
+                              <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                              <p className="text-sm">This email has no text content</p>
+                              {email.attachments && email.attachments.length > 0 && (
+                                <p className="text-xs mt-1">Only attachments are included</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
+                      {/* Global styles for email content */}
+                      <style>{`
+                        .email-body-content img {
+                          max-width: 100%;
+                          height: auto;
+                        }
+                        .email-body-content table {
+                          border-spacing: 0;
+                        }
+                        .email-body-content td {
+                          padding: 4px 8px;
+                        }
+                        .email-body-content tr {
+                          height: auto;
+                        }
+                        /* Handle double line breaks in quoted emails - convert to single */
+                        .email-body-content blockquote br {
+                          display: none;
+                        }
+                        .email-body-content blockquote br + br {
+                          display: block;
+                        }
+                        /* Styles for quoted email headers in replies */
+                        .email-body-content blockquote {
+                          margin: 12px 0;
+                          padding: 8px 12px;
+                          border-left: 3px solid #d1d5db;
+                          background-color: #f9fafb;
+                          color: #4b5563;
+                          font-size: 14px;
+                        }
+                        .email-body-content hr {
+                          border: none;
+                          border-top: 1px solid #e5e7eb;
+                          margin: 16px 0;
+                        }
+                        /* Gmail/Outlook style quoted content */
+                        .email-body-content .gmail_quote,
+                        .email-body-content .OutlookMessageHeader {
+                          border-left: 3px solid #d1d5db;
+                          padding-left: 12px;
+                          margin: 12px 0;
+                          color: #6b7280;
+                        }
+                      `}</style>
+
                       {email.attachments && email.attachments.length > 0 && (
-                        <div className="mb-4">
-                          <div className="text-sm font-medium text-gray-700 mb-2">
+                        <div className="mb-2">
+                          <div className="text-sm font-medium text-gray-700 mb-1">
                             Attachments ({email.attachments.length}):
                           </div>
                           <div className="flex flex-wrap gap-2">

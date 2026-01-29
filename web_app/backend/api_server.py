@@ -1256,16 +1256,34 @@ async def fetch_emails_for_folder_async(
                     elif '@' in to_str:
                         recipients.append(to_str.strip())
 
+            # Get original RFC822 raw email content
+            # This is the complete raw email with headers and body as received from IMAP
+            raw_rfc822 = ''
+            if hasattr(email, 'obj') and email.obj:
+                try:
+                    raw_rfc822 = email.obj.as_string()
+                except Exception as e:
+                    print(f"[Emails WS] Warning: Could not get raw RFC822 for email {uid}: {e}")
+                    raw_rfc822 = ''
+
+            # Get original HTML and text for raw copy functionality
+            original_html = email.html if hasattr(email, 'html') else ''
+            original_text = email.text if hasattr(email, 'text') else ''
+
+            # Debug: Log email content availability
+            if not original_html and not original_text:
+                print(f"[Emails WS] Warning: Email {uid} has no HTML or text body (attachments: {len(email.attachments) if hasattr(email, 'attachments') else 0})")
+
             # Get body - prefer HTML over plain text for richer content
             # HTML emails contain formatting, images, links, etc.
-            body = email.html or email.text or ''
+            body = original_html or original_text or ''
 
             # Get preview text - strip HTML tags for list view
-            preview_text = email.text or ''
-            if not preview_text and email.html:
+            preview_text = original_text or ''
+            if not preview_text and original_html:
                 # Strip HTML tags if no plain text available
                 import re
-                preview_text = re.sub(r'<[^>]+>', '', email.html)
+                preview_text = re.sub(r'<[^>]+>', '', original_html)
                 preview_text = re.sub(r'\s+', ' ', preview_text).strip()
 
             # Check flags
@@ -1295,6 +1313,9 @@ async def fetch_emails_for_folder_async(
                 'to': recipients,
                 'date': date_str,
                 'body': body,
+                'html': original_html,  # Original HTML content
+                'text': original_text,  # Original plain text content
+                'raw': raw_rfc822,  # Complete RFC822 raw email with headers
                 'preview': preview_text[:500] if preview_text else '',  # First 500 chars for list view
                 'isUnread': is_unread,
                 'isFlagged': is_flagged,
@@ -1675,15 +1696,27 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
                 # Process chunks
+                # Use a helper function to avoid StopIteration in Future
+                def get_next_chunk():
+                    try:
+                        return next(chunks_generator), None
+                    except StopIteration:
+                        return None, "stop"
+                    except Exception as e:
+                        return None, str(e)
+
                 while True:
                     # Get next chunk in thread pool to avoid blocking
-                    try:
-                        chunk = await loop.run_in_executor(None, lambda: next(chunks_generator))
-                    except StopIteration:
+                    chunk, error = await loop.run_in_executor(None, get_next_chunk)
+
+                    if error == "stop":
                         # Stream finished
                         break
-                    except Exception as e:
-                        print(f"Error getting next chunk: {e}")
+                    elif error:
+                        print(f"Error getting next chunk: {error}")
+                        break
+
+                    if chunk is None:
                         break
 
                     # Check if connection is still open
