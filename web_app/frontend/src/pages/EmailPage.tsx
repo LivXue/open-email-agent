@@ -21,6 +21,7 @@ import {
   Send,
   Copy,
   Check,
+  Sparkles,
 } from 'lucide-react';
 import { useEmailContext, type EmailData, type FolderState } from '../contexts/EmailContext';
 import { useToast } from '../contexts/ToastContext';
@@ -562,6 +563,7 @@ interface ComposeState {
   subject: string;
   body: string;
   originalEmail?: EmailData;
+  aiInstructions?: string;
 }
 
 export function EmailPage() {
@@ -594,9 +596,11 @@ export function EmailPage() {
     bcc: '',
     subject: '',
     body: '',
+    aiInstructions: '',
   });
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
   const [copiedEmailUid, setCopiedEmailUid] = useState<number | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
 
   // Move to folder modal state
   const [moveFolderState, setMoveFolderState] = useState<{
@@ -700,6 +704,7 @@ export function EmailPage() {
       subject: email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`,
       body: `\n\n---------- Original Message ----------\nFrom: ${email.fromName || email.from}\nDate: ${email.date}\nSubject: ${email.subject}\n\n`,
       originalEmail: email,
+      aiInstructions: '',
     });
   };
 
@@ -779,6 +784,57 @@ export function EmailPage() {
     } finally {
       setMovingEmail(false);
       console.log('[Move Email] Move operation completed');
+    }
+  };
+
+  // Generate AI reply/compose
+  const handleAIReply = async () => {
+    try {
+      setIsGeneratingAI(true);
+
+      // Only send original_email for reply and forward modes
+      const shouldSendOriginalEmail = composeState.mode === 'reply' || composeState.mode === 'forward';
+
+      const response = await fetch(`${API_BASE}/api/emails/ai-reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: composeState.mode,
+          original_email: shouldSendOriginalEmail && composeState.originalEmail ? {
+            from: composeState.originalEmail.from,
+            from_name: composeState.originalEmail.fromName,
+            subject: composeState.originalEmail.subject,
+            body: composeState.originalEmail.body,
+            date: composeState.originalEmail.date,
+          } : null,
+          to: composeState.to,
+          subject: composeState.subject,
+          instructions: composeState.aiInstructions || '',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success' && data.reply) {
+        // Set AI-generated content to body
+        setComposeState({ ...composeState, body: data.reply });
+        showSuccess(
+          composeState.mode === 'reply'
+            ? 'AI reply generated successfully!'
+            : composeState.mode === 'forward'
+            ? 'AI forwarding message generated successfully!'
+            : 'Email drafted successfully!'
+        );
+      } else {
+        showError(data.detail || data.message || 'Failed to generate AI content');
+      }
+    } catch (error) {
+      console.error('Failed to generate AI content:', error);
+      showError('Failed to generate AI content');
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
@@ -1703,34 +1759,232 @@ export function EmailPage() {
                     placeholder="Type your message here..."
                   />
                 </div>
+
+                {/* AI Instructions Field - available for all modes */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                      AI Instructions:
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {composeState.mode === 'reply'
+                        ? 'Tell the AI how to tailor your reply (optional)'
+                        : composeState.mode === 'forward'
+                        ? 'Tell the AI how to write the forwarding message (optional)'
+                        : 'Describe the email you want to write, and AI will generate it for you'}
+                    </p>
+                    <input
+                      type="text"
+                      value={composeState.aiInstructions || ''}
+                      onChange={(e) => setComposeState({ ...composeState, aiInstructions: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      placeholder={
+                        composeState.mode === 'reply'
+                          ? "e.g., 'Be more friendly', 'Keep it brief', 'Ask for a meeting'"
+                          : composeState.mode === 'forward'
+                          ? "e.g., 'Add a brief introduction', 'Highlight key points'"
+                          : "e.g., 'Write a meeting request to John', 'Follow up on the invoice'"
+                      }
+                    />
+                  </div>
+
+                  {/* Quick Preset Templates - show different templates based on mode */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">
+                      Quick templates:
+                    </label>
+                    {composeState.mode === 'reply' && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Professional and concise reply'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Professional
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Friendly and casual tone'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Friendly
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Keep it very brief, just 2-3 sentences'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Brief
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Express gratitude and be enthusiastic'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Grateful
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Propose a meeting or call to discuss further'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Request Meeting
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Ask follow-up questions to clarify details'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Ask Questions
+                        </button>
+                      </div>
+                    )}
+                    {composeState.mode === 'forward' && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Add a brief note introducing the forwarded email'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          With Introduction
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Highlight the key points from the original email'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Highlight Key Points
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Request action or response from recipient'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Request Action
+                        </button>
+                      </div>
+                    )}
+                    {composeState.mode === 'compose' && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Write a professional meeting request'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Meeting Request
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Write a follow-up email on a previous conversation'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Follow Up
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Write a thank you email'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Thank You
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Write an inquiry about a product or service'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Inquiry
+                        </button>
+                        <button
+                          onClick={() => setComposeState({
+                            ...composeState,
+                            aiInstructions: 'Write a proposal or pitch'
+                          })}
+                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                        >
+                          Proposal
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
               <button
-                onClick={() => setComposeState({ ...composeState, isOpen: false })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={handleAIReply}
+                disabled={isGeneratingAI}
+                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendEmail}
-                disabled={sendingEmail}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {sendingEmail ? (
+                {isGeneratingAI ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Sending...
+                    Generating...
                   </>
                 ) : (
                   <>
-                    <Send className="w-4 h-4" />
-                    Send
+                    <Sparkles className="w-4 h-4" />
+                    {composeState.mode === 'reply'
+                      ? 'AI Reply'
+                      : composeState.mode === 'forward'
+                      ? 'AI Write'
+                      : 'AI Write'}
                   </>
                 )}
               </button>
+              <div className="flex items-center gap-3 ml-auto">
+                <button
+                  onClick={() => setComposeState({ ...composeState, isOpen: false })}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {sendingEmail ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

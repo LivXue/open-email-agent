@@ -1159,6 +1159,226 @@ async def send_email_endpoint(
         raise HTTPException(status_code=500, detail=error_detail)
 
 
+@app.post("/api/emails/ai-reply")
+async def generate_ai_reply(request: dict):
+    """Generate an AI reply, forward message, or compose new email."""
+    try:
+        # Extract request data
+        mode = request.get("mode", "reply")  # reply, forward, or compose
+        original_email = request.get("original_email")
+        to = request.get("to", "")
+        subject = request.get("subject", "")
+        user_instructions = request.get("instructions", "").strip()
+
+        # Strip HTML helper
+        from html.parser import HTMLParser
+        class MLStripper(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.reset()
+                self.strict = False
+                self.convert_charrefs = True
+                self.text = []
+            def handle_data(self, d):
+                self.text.append(d)
+            def get_data(self):
+                return ''.join(self.text)
+
+        def strip_tags(html_content):
+            stripper = MLStripper()
+            stripper.feed(html_content)
+            return stripper.get_data()
+
+        # Construct prompt based on mode
+        if mode == "reply":
+            # Reply mode - original email is required
+            if not original_email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="original_email is required for reply mode"
+                )
+
+            # Extract email details
+            from_name = original_email.get("from_name", "")
+            from_email = original_email.get("from", "")
+            subject = original_email.get("subject", "")
+            body = original_email.get("body", "")
+            date_str = original_email.get("date", "")
+
+            # Create sender display name
+            sender = f"{from_name} <{from_email}>" if from_name else from_email
+
+            # Clean body text
+            clean_body = strip_tags(body) if body else ""
+
+            # Truncate body if too long (keep first 2000 chars)
+            if len(clean_body) > 2000:
+                clean_body = clean_body[:2000] + "..."
+
+            if user_instructions:
+                prompt = f"""You are an email assistant. Generate a reply to the following email.
+
+Original Email:
+From: {sender}
+Date: {date_str}
+Subject: {subject}
+
+{clean_body}
+
+User Instructions: {user_instructions}
+
+Generate a reply following the user's instructions above.
+
+Provide ONLY the reply text, without any additional commentary or explanation."""
+            else:
+                prompt = f"""You are an email assistant. Generate a professional reply to the following email.
+
+Original Email:
+From: {sender}
+Date: {date_str}
+Subject: {subject}
+
+{clean_body}
+
+Generate a reply that:
+1. Is professional and concise
+2. Addresses the main points
+3. Maintains a helpful tone
+
+Provide ONLY the reply text, without any additional commentary or explanation."""
+
+        elif mode == "forward":
+            # Forward mode - original email is required
+            if not original_email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="original_email is required for forward mode"
+                )
+
+            # Extract email details
+            from_name = original_email.get("from_name", "")
+            subject = original_email.get("subject", "")
+            body = original_email.get("body", "")
+            date_str = original_email.get("date", "")
+
+            # Clean body text
+            clean_body = strip_tags(body) if body else ""
+
+            # Truncate body if too long (keep first 1500 chars for forward)
+            if len(clean_body) > 1500:
+                clean_body = clean_body[:1500] + "..."
+
+            if user_instructions:
+                prompt = f"""You are writing a brief forwarding note for an email that will be forwarded.
+
+Original Email Being Forwarded:
+From: {from_name}
+Date: {date_str}
+Subject: {subject}
+
+Content Summary:
+{clean_body}
+
+User Instructions: {user_instructions}
+
+Write a brief forwarding note (1-2 sentences) that:
+- Appears at the top of the forwarded email
+- Follows the user's instructions above
+- Is concise and professional
+
+Provide ONLY the forwarding note text, without any additional commentary."""
+            else:
+                prompt = f"""You are writing a brief forwarding note for an email that will be forwarded.
+
+Original Email Being Forwarded:
+From: {from_name}
+Date: {date_str}
+Subject: {subject}
+
+Content Summary:
+{clean_body}
+
+Write a brief forwarding note (1-2 sentences) that:
+- Appears at the top of the forwarded email
+- Mentions who sent the original email and why it's being forwarded
+- Optionally highlights what the recipient should pay attention to
+- Is concise and professional
+
+Example format: "Hi [Name], forwarding this email from [Sender] about [topic]. Please review and let me know your thoughts."
+
+Provide ONLY the forwarding note text, without any additional commentary or explanation."""
+
+        elif mode == "compose":
+            # Compose mode - generate new email
+            if not user_instructions:
+                raise HTTPException(
+                    status_code=400,
+                    detail="instructions are required for compose mode"
+                )
+
+            prompt = f"""You are an email assistant. Write a new email based on the user's instructions.
+
+To: {to}
+Subject: {subject}
+
+User Instructions: {user_instructions}
+
+Write an email following the user's instructions above.
+
+Provide ONLY the email body text, without any additional commentary or explanation."""
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid mode: {mode}. Must be 'reply', 'forward', or 'compose'"
+            )
+
+        # Check if chat model is initialized
+        global chat_model
+        if chat_model is None:
+            # Initialize chat model
+            from dotenv import load_dotenv
+            load_dotenv()
+
+            model_name = os.getenv("MODEL", "gpt-4")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            openai_base_url = os.getenv("OPENAI_BASE_URL")
+
+            if not openai_api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="OpenAI API key not configured. Please check your .env file."
+                )
+
+            # Initialize chat model
+            chat_model = ChatQwQ(
+                model=model_name,
+                temperature=0.7,
+                api_key=openai_api_key,
+                base_url=openai_base_url,
+            )
+
+        # Generate AI content
+        from langchain_core.messages import HumanMessage
+        messages = [HumanMessage(content=prompt)]
+        response = await chat_model.ainvoke(messages)
+
+        # Extract reply text
+        ai_reply = response.content.strip()
+
+        return {
+            "status": "success",
+            "reply": ai_reply
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 # ==================== Email Loading WebSocket - Completely New Implementation ====================
 # This is a standalone implementation that does NOT use read_emails or any email_tools functions
 # It directly interacts with the IMAP mailbox using imap_tools
