@@ -4,7 +4,7 @@
 
   ### Your Email System Can Finally Do Jobs For You!
 
-  ![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.0.4-blue.svg)
   ![Status](https://img.shields.io/badge/status-beta-orange.svg)
   ![License](https://img.shields.io/badge/license-MIT-green.svg)
   ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
@@ -24,11 +24,25 @@
 
 <div align="center">
 
-## 🎉 What's New in v0.0.3
+## 🎉 What's New in v0.0.4
 
-### ✨ Emails Page - Improved Rendering
+### ✨ AI-Powered Email Writing
 
-We've completely redesigned the Emails page with a modern, feature-rich email client interface.
+We've added AI-powered email writing capabilities to help you draft emails faster and more efficiently!
+
+#### **Features:**
+
+- **🤖 AI Reply** - Generate intelligent replies to incoming emails with one click
+- **✍️ AI Compose** - Write new emails from scratch with AI assistance
+- **📤 AI Forward** - Create professional forwarding messages instantly
+- **🎨 Custom Instructions** - Guide the AI with your own prompts or use quick templates
+- **⚡ Quick Templates** - Pre-built templates for common email scenarios
+
+#### **How It Works:**
+
+1. **Reply Mode**: Choose from templates like "Professional", "Friendly", "Brief", "Grateful", "Request Meeting", or "Ask Questions"
+2. **Forward Mode**: Add introductions, highlight key points, or request actions
+3. **Compose Mode**: Write meeting requests, follow-ups, thank you notes, inquiries, or proposals
 
 </div>
 

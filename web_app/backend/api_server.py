@@ -57,6 +57,50 @@ email_smtp_connected = False
 app = FastAPI(title="MailMind API")
 
 
+# ==================== Shared Constants and Helpers ====================
+
+# Email writer subagent configuration (shared between global and session agents)
+EMAIL_WRITER_SUBAGENT = {
+    "name": "email-writer",
+    "description": "Used to write an email, receive user's request and correspondence, and then write an email in a polite manner.",
+    "system_prompt": "You are a professional email writer with expertise in business and personal communication. Your task is to craft well-structured, polite, and appropriate email responses based on the user's requirements and the context of previous correspondence.\n\nWhen writing an email, follow these guidelines:\n\n1. **Analyze the Context**: Carefully review the user's request and any previous email exchanges to understand:\n   - The purpose of the email (inquiry, response, follow-up, request, etc.)\n   - The relationship between sender and recipient\n   - The tone and style of previous communications\n   - Any specific requirements or constraints mentioned by the user\n\n2. **Structure Your Email**: Include:\n   - A clear and appropriate subject line\n   - A professional greeting\n   - A well-organized body with logical flow\n   - A polite closing\n   - Proper signature\n\n3. **Tone and Style**:\n   - Use a professional yet friendly tone\n   - Be concise and clear\n   - Show empathy and understanding\n   - Maintain appropriate formality based on the relationship\n   - Avoid jargon unless necessary\n\n4. **Content Guidelines**:\n   - Address all points raised in previous emails\n   - Provide complete and helpful responses\n   - If you need more information, ask politely\n   - Express gratitude when appropriate\n   - Be honest about what you can and cannot do\n\n5. **Language and Formatting**:\n   - Use proper grammar and spelling\n   - Write in clear, complete sentences\n   - Use paragraphs for readability\n   - Avoid excessive punctuation or ALL CAPS\n\nBefore writing, think through:\n- What is the main goal of this email?\n- What does the recipient need to know or do?\n- How can I be most helpful and courteous?\n- What is the appropriate level of formality?\n\nWrite the email in the same language as the user's request.",
+    "tools": [],  # Will be populated with internet_search when needed
+}
+
+
+def create_internet_search_func(tavily_client):
+    """Create internet search function with Tavily client."""
+    def internet_search(query: str, max_results: int = 5):
+        """Run a web search"""
+        return tavily_client.search(query, max_results=max_results)
+    return internet_search
+
+
+def get_or_init_chat_model():
+    """Get existing chat model or initialize a new one."""
+    global chat_model
+    if chat_model is None:
+        chat_model = ChatQwQ(
+            model=os.getenv("MODEL"),
+            base_url=os.getenv("OPENAI_BASE_URL"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=0.7,
+        )
+    return chat_model
+
+
+def normalize_contact_data(contact):
+    """Normalize contact data to a consistent format."""
+    return {
+        "id": contact.get("id", ""),
+        "name": contact.get("name", ""),
+        "emails": contact.get("emails", []),
+        "groups": contact.get("groups", []),
+        "created_time": contact.get("created_time", ""),
+        "update_time": contact.get("update_time", "")
+    }
+
+
 # ==================== Pydantic Models ====================
 
 class ContactCreate(BaseModel):
@@ -164,29 +208,12 @@ def initialize_agent():
     global agent, agent_initialized
 
     try:
-        display_reasoning = os.getenv("DISPLAY_REASONING", "False") == "True"
-        chat_model = ChatQwQ(
-            model=os.getenv("MODEL"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            temperature=0.7,
-            # extra_body={
-            #     "thinking": {"type": "enabled"},
-            # },
-        )
-
+        chat_model = get_or_init_chat_model()
         tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+        internet_search = create_internet_search_func(tavily_client)
 
-        def internet_search(query: str, max_results: int = 5):
-            """Run a web search"""
-            return tavily_client.search(query, max_results=max_results)
-
-        email_writer_subagent = {
-            "name": "email-writer",
-            "description": "Used to write an email, receive user's request and correspondence, and then write an email in a polite manner.",
-            "system_prompt": "You are a professional email writer with expertise in business and personal communication. Your task is to craft well-structured, polite, and appropriate email responses based on the user's requirements and the context of previous correspondence.\n\nWhen writing an email, follow these guidelines:\n\n1. **Analyze the Context**: Carefully review the user's request and any previous email exchanges to understand:\n   - The purpose of the email (inquiry, response, follow-up, request, etc.)\n   - The relationship between sender and recipient\n   - The tone and style of previous communications\n   - Any specific requirements or constraints mentioned by the user\n\n2. **Structure Your Email**: Include:\n   - A clear and appropriate subject line\n   - A professional greeting\n   - A well-organized body with logical flow\n   - A polite closing\n   - Proper signature\n\n3. **Tone and Style**:\n   - Use a professional yet friendly tone\n   - Be concise and clear\n   - Show empathy and understanding\n   - Maintain appropriate formality based on the relationship\n   - Avoid jargon unless necessary\n\n4. **Content Guidelines**:\n   - Address all points raised in previous emails\n   - Provide complete and helpful responses\n   - If you need more information, ask politely\n   - Express gratitude when appropriate\n   - Be honest about what you can and cannot do\n\n5. **Language and Formatting**:\n   - Use proper grammar and spelling\n   - Write in clear, complete sentences\n   - Use paragraphs for readability\n   - Avoid excessive punctuation or ALL CAPS\n\nBefore writing, think through:\n- What is the main goal of this email?\n- What does the recipient need to know or do?\n- How can I be most helpful and courteous?\n- What is the appropriate level of formality?\n\nWrite the email in the same language as the user's request.",
-            "tools": [internet_search],
-        }
+        # Add internet_search to email_writer_subagent
+        email_writer_subagent = {**EMAIL_WRITER_SUBAGENT, "tools": [internet_search]}
 
         tools = get_imports()
 
@@ -301,41 +328,16 @@ def ensure_agent(session_id: str = "default"):
 
 def initialize_agent_for_session(session_id: str):
     """Initialize a new agent instance for a specific session."""
-    global chat_model, agent_initialized
-
-    # Initialize chat model if needed
-    if chat_model is None:
-        MODEL = os.getenv("MODEL")
-        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
-
-        if not all([MODEL, OPENAI_API_KEY]):
-            print("Missing required environment variables for chat model")
-            return None
-
-        chat_model = ChatQwQ(
-            model=MODEL,
-            api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL,
-        )
-
     # Create filesystem backend for this session
     # Each session gets its own isolated filesystem directory
     fs_base_dir = os.path.join(project_root, "agent_fs", session_id)
     os.makedirs(fs_base_dir, exist_ok=True)
 
     tavily_client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+    internet_search = create_internet_search_func(tavily_client)
 
-    def internet_search(query: str, max_results: int = 5):
-        """Run a web search"""
-        return tavily_client.search(query, max_results=max_results)
-
-    email_writer_subagent = {
-            "name": "email-writer",
-            "description": "Used to write an email, receive user's request and correspondence, and then write an email in a polite manner.",
-            "system_prompt": "You are a professional email writer with expertise in business and personal communication. Your task is to craft well-structured, polite, and appropriate email responses based on the user's requirements and the context of previous correspondence.\n\nWhen writing an email, follow these guidelines:\n\n1. **Analyze the Context**: Carefully review the user's request and any previous email exchanges to understand:\n   - The purpose of the email (inquiry, response, follow-up, request, etc.)\n   - The relationship between sender and recipient\n   - The tone and style of previous communications\n   - Any specific requirements or constraints mentioned by the user\n\n2. **Structure Your Email**: Include:\n   - A clear and appropriate subject line\n   - A professional greeting\n   - A well-organized body with logical flow\n   - A polite closing\n   - Proper signature\n\n3. **Tone and Style**:\n   - Use a professional yet friendly tone\n   - Be concise and clear\n   - Show empathy and understanding\n   - Maintain appropriate formality based on the relationship\n   - Avoid jargon unless necessary\n\n4. **Content Guidelines**:\n   - Address all points raised in previous emails\n   - Provide complete and helpful responses\n   - If you need more information, ask politely\n   - Express gratitude when appropriate\n   - Be honest about what you can and cannot do\n\n5. **Language and Formatting**:\n   - Use proper grammar and spelling\n   - Write in clear, complete sentences\n   - Use paragraphs for readability\n   - Avoid excessive punctuation or ALL CAPS\n\nBefore writing, think through:\n- What is the main goal of this email?\n- What does the recipient need to know or do?\n- How can I be most helpful and courteous?\n- What is the appropriate level of formality?\n\nWrite the email in the same language as the user's request.",
-            "tools": [internet_search],
-        }
+    # Add internet_search to email_writer_subagent
+    email_writer_subagent = {**EMAIL_WRITER_SUBAGENT, "tools": [internet_search]}
 
     filesystem_backend = FilesystemBackend(
         root_dir=fs_base_dir,
@@ -344,10 +346,10 @@ def initialize_agent_for_session(session_id: str):
 
     # Create agent with session-specific filesystem
     session_agent = create_deep_agent(
-        model=chat_model,
+        model=get_or_init_chat_model(),
         system_prompt=get_main_prompt(),
         backend=filesystem_backend,
-        tools=[internet_search] + list(get_imports().values()), 
+        tools=[internet_search] + list(get_imports().values()),
         subagents=[email_writer_subagent]
     )
 
@@ -493,15 +495,7 @@ async def get_contacts(
         # Filter contacts based on search criteria
         contacts = []
         for contact in address_book_data.values():
-            normalized = {
-                "id": contact.get("id", ""),
-                "name": contact.get("name", ""),
-                "emails": contact.get("emails", []),
-                "groups": contact.get("groups", []),
-                "created_time": contact.get("created_time", ""),
-                "update_time": contact.get("update_time", "")
-            }
-            contacts.append(normalized)
+            contacts.append(normalize_contact_data(contact))
 
         if name:
             contacts = [c for c in contacts if name.lower() in c['name'].lower()]
@@ -533,20 +527,9 @@ async def get_contact(contact_id: str):
         if contact_id not in address_book_data:
             raise HTTPException(status_code=404, detail="Contact not found")
 
-        # Normalize the contact data
-        contact = address_book_data[contact_id]
-        normalized = {
-            "id": contact.get("id", ""),
-            "name": contact.get("name", ""),
-            "emails": contact.get("emails", []),
-            "groups": contact.get("groups", []),
-            "created_time": contact.get("created_time", ""),
-            "update_time": contact.get("update_time", "")
-        }
-
         return {
             "status": "success",
-            "contact": normalized
+            "contact": normalize_contact_data(address_book_data[contact_id])
         }
     except HTTPException:
         raise
@@ -560,8 +543,6 @@ async def get_contact(contact_id: str):
 async def create_contact(contact: ContactCreate):
     """Create a new contact."""
     try:
-        import lib.email_tools as email_tools_module
-
         # Use the module's address_book_data to avoid stale references
         email_tools_module.load_address_book()
         address_book_data = email_tools_module.address_book_data
@@ -599,19 +580,11 @@ async def create_contact(contact: ContactCreate):
             new_id = str(max(int(k) for k in address_book_data.keys()))
 
         new_contact = address_book_data[new_id]
-        normalized = {
-            "id": new_contact.get("id", ""),
-            "name": new_contact.get("name", ""),
-            "emails": new_contact.get("emails", []),
-            "groups": new_contact.get("groups", []),
-            "created_time": new_contact.get("created_time", ""),
-            "update_time": new_contact.get("update_time", "")
-        }
 
         return {
             "status": "success",
             "message": "Contact created successfully",
-            "contact": normalized
+            "contact": normalize_contact_data(new_contact)
         }
     except HTTPException:
         raise
@@ -625,8 +598,6 @@ async def create_contact(contact: ContactCreate):
 async def update_contact(contact_id: str, contact: ContactUpdate):
     """Update an existing contact."""
     try:
-        import lib.email_tools as email_tools_module
-
         # Use the module's address_book_data to avoid stale references
         email_tools_module.load_address_book()
         address_book_data = email_tools_module.address_book_data
@@ -666,21 +637,10 @@ async def update_contact(contact_id: str, contact: ContactUpdate):
         email_tools_module.load_address_book()
         address_book_data = email_tools_module.address_book_data
 
-        # Normalize the contact data
-        updated_contact = address_book_data[contact_id]
-        normalized = {
-            "id": updated_contact.get("id", ""),
-            "name": updated_contact.get("name", ""),
-            "emails": updated_contact.get("emails", []),
-            "groups": updated_contact.get("groups", []),
-            "created_time": updated_contact.get("created_time", ""),
-            "update_time": updated_contact.get("update_time", "")
-        }
-
         return {
             "status": "success",
             "message": "Contact updated successfully",
-            "contact": normalized
+            "contact": normalize_contact_data(address_book_data[contact_id])
         }
     except HTTPException:
         raise
@@ -694,8 +654,6 @@ async def update_contact(contact_id: str, contact: ContactUpdate):
 async def delete_contact(contact_id: str):
     """Delete a contact."""
     try:
-        import lib.email_tools as email_tools_module
-
         # Use the module's address_book_data to avoid stale references
         email_tools_module.load_address_book()
         address_book_data = email_tools_module.address_book_data
@@ -1334,28 +1292,12 @@ Provide ONLY the email body text, without any additional commentary or explanati
             )
 
         # Check if chat model is initialized
-        global chat_model
-        if chat_model is None:
-            # Initialize chat model
-            from dotenv import load_dotenv
-            load_dotenv()
+        chat_model = get_or_init_chat_model()
 
-            model_name = os.getenv("MODEL", "gpt-4")
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            openai_base_url = os.getenv("OPENAI_BASE_URL")
-
-            if not openai_api_key:
-                raise HTTPException(
-                    status_code=503,
-                    detail="OpenAI API key not configured. Please check your .env file."
-                )
-
-            # Initialize chat model
-            chat_model = ChatQwQ(
-                model=model_name,
-                temperature=0.7,
-                api_key=openai_api_key,
-                base_url=openai_base_url,
+        if not os.getenv("OPENAI_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="OpenAI API key not configured. Please check your .env file."
             )
 
         # Generate AI content

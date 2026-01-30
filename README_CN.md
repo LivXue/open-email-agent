@@ -2,9 +2,9 @@
 
   # 📧 MailMind
 
-  ### 你的电子邮件终于可以自己工作了！
+  ### 你的电子邮箱终于可以自主工作了！
 
-  ![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.0.4-blue.svg)
   ![Status](https://img.shields.io/badge/status-beta-orange.svg)
   ![License](https://img.shields.io/badge/license-MIT-green.svg)
   ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
@@ -24,11 +24,25 @@
 
 <div align="center">
 
-## 🎉 v0.0.2 版本更新
+## 🎉 v0.0.4 版本更新
 
-### ✨ 邮件页面 - 全面焕新
+### ✨ AI 智能写信功能
 
-我们彻底重新设计了邮件页面，打造了现代化、功能丰富的邮件客户端界面。
+我们添加了 AI 驱动的邮件撰写功能，帮助您更快、更高效地起草邮件！
+
+#### **新增功能：**
+
+- **🤖 AI 回复** - 一键生成智能回复，快速处理来信
+- **✍️ AI 撰写** - 从零开始撰写新邮件，AI 助您一臂之力
+- **📤 AI 转发** - 即刻创建专业的转发说明
+- **🎨 自定义指令** - 通过自定义提示词或快速模板指导 AI
+- **⚡ 快速模板** - 为常见邮件场景预设模板
+
+#### **使用方式：**
+
+1. **回复模式**：选择"专业"、"友好"、"简洁"、"感激"、"请求会议"或"提问"等模板
+2. **转发模式**：添加介绍、突出重点或请求行动
+3. **撰写模式**：撰写会议请求、跟进邮件、感谢信、询问或提案
 
 </div>
 

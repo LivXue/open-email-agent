@@ -566,6 +566,42 @@ interface ComposeState {
   aiInstructions?: string;
 }
 
+// Initial compose state - used for both initialization and reset
+const INITIAL_COMPOSE_STATE: ComposeState = {
+  isOpen: false,
+  mode: 'compose',
+  to: '',
+  cc: '',
+  bcc: '',
+  subject: '',
+  body: '',
+  aiInstructions: '',
+};
+
+// AI instruction templates for different compose modes
+const AI_TEMPLATES = {
+  reply: [
+    { instructions: 'Professional and concise reply', label: 'Professional' },
+    { instructions: 'Friendly and casual tone', label: 'Friendly' },
+    { instructions: 'Keep it very brief, just 2-3 sentences', label: 'Brief' },
+    { instructions: 'Express gratitude and be enthusiastic', label: 'Grateful' },
+    { instructions: 'Propose a meeting or call to discuss further', label: 'Request Meeting' },
+    { instructions: 'Ask follow-up questions to clarify details', label: 'Ask Questions' },
+  ],
+  forward: [
+    { instructions: 'Add a brief note introducing the forwarded email', label: 'With Introduction' },
+    { instructions: 'Highlight the key points from the original email', label: 'Highlight Key Points' },
+    { instructions: 'Request action or response from recipient', label: 'Request Action' },
+  ],
+  compose: [
+    { instructions: 'Write a professional meeting request', label: 'Meeting Request' },
+    { instructions: 'Write a follow-up email on a previous conversation', label: 'Follow Up' },
+    { instructions: 'Write a thank you email', label: 'Thank You' },
+    { instructions: 'Write an inquiry about a product or service', label: 'Inquiry' },
+    { instructions: 'Write a proposal or pitch', label: 'Proposal' },
+  ],
+} as const;
+
 export function EmailPage() {
   // Use email context for shared state
   const {
@@ -585,19 +621,9 @@ export function EmailPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [expandedEmail, setExpandedEmail] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Compose modal state
-  const [composeState, setComposeState] = useState<ComposeState>({
-    isOpen: false,
-    mode: 'compose',
-    to: '',
-    cc: '',
-    bcc: '',
-    subject: '',
-    body: '',
-    aiInstructions: '',
-  });
+  const [composeState, setComposeState] = useState<ComposeState>(INITIAL_COMPOSE_STATE);
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
   const [copiedEmailUid, setCopiedEmailUid] = useState<number | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
@@ -655,11 +681,11 @@ export function EmailPage() {
           return email;
         });
       } else {
-        setErrorMessage(data.detail || 'Failed to update email');
+        showError(data.detail || 'Failed to update email');
       }
     } catch (error) {
       console.error('Failed to flag email:', error);
-      setErrorMessage('Failed to update email');
+      showError('Failed to update email');
     }
   };
 
@@ -681,11 +707,11 @@ export function EmailPage() {
         removeEmailFromFolders(emailUid);
         setExpandedEmail(null);
       } else {
-        setErrorMessage(data.detail || 'Failed to delete email');
+        showError(data.detail || 'Failed to delete email');
       }
     } catch (error) {
       console.error('Failed to delete email:', error);
-      setErrorMessage('Failed to delete email');
+      showError('Failed to delete email');
     }
   };
 
@@ -870,15 +896,7 @@ export function EmailPage() {
 
       if (data.status === 'success') {
         // Close modal
-        setComposeState({
-          isOpen: false,
-          mode: 'compose',
-          to: '',
-          cc: '',
-          bcc: '',
-          subject: '',
-          body: '',
-        });
+        setComposeState(INITIAL_COMPOSE_STATE);
         showSuccess('Email sent successfully!');
       } else {
         showError(`Failed to send email: ${data.detail || data.message}`);
@@ -1011,15 +1029,7 @@ export function EmailPage() {
           <button
             className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 shadow-sm transition-colors font-medium"
             onClick={() => {
-              setComposeState({
-                isOpen: true,
-                mode: 'compose',
-                to: '',
-                cc: '',
-                bcc: '',
-                subject: '',
-                body: '',
-              });
+              setComposeState({ ...INITIAL_COMPOSE_STATE, isOpen: true });
             }}
           >
             <FileText className="w-5 h-5" />
@@ -1097,11 +1107,7 @@ export function EmailPage() {
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900">
-              {selectedFolder === '[Gmail]/Starred' && 'Starred'}
-              {selectedFolder === '[Gmail]/Sent' && 'Sent'}
-              {selectedFolder === '[Gmail]/Drafts' && 'Drafts'}
-              {selectedFolder === 'INBOX' && 'Inbox'}
-              {!selectedFolder.startsWith('[Gmail]') && selectedFolder !== 'INBOX' && selectedFolder}
+              {getFolderDisplayName(selectedFolder)}
             </h2>
 
             {/* Status indicator */}
@@ -1183,20 +1189,6 @@ export function EmailPage() {
               <RefreshCw className={`w-5 h-5 ${currentFolderState.loadStatus === 'loading' ? 'animate-spin' : ''}`} />
             </button>
           </div>
-
-          {/* Error message */}
-          {errorMessage && (
-            <div className="mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              <XCircle className="w-5 h-5 flex-shrink-0" />
-              <span>{errorMessage}</span>
-              <button
-                onClick={() => setErrorMessage('')}
-                className="ml-auto text-red-700 hover:text-red-900"
-              >
-                ✕
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Email list */}
@@ -1338,24 +1330,9 @@ export function EmailPage() {
                           <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                             {formatDate(email.date)}
                           </span>
-
-                          <div className="ml-2">
-                            <svg
-                              className={`w-5 h-5 text-gray-400 transition-transform ${
-                                expandedEmail === email.uid ? 'rotate-180' : ''
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 9l-7 7-7-7"
-                              />
-                            </svg>
-                          </div>
+                          <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ml-2 ${
+                            expandedEmail === email.uid ? 'rotate-180' : ''
+                          }`} />
                         </div>
 
                         <div
@@ -1473,44 +1450,31 @@ export function EmailPage() {
                         .email-body-content tr {
                           height: auto;
                         }
-                        /* Preserve center alignment for images and other elements */
-                        .email-body-content [align="center"] {
+                        /* Preserve center alignment - use [style*] to match both with/without spaces */
+                        .email-body-content [align="center"],
+                        .email-body-content center,
+                        .email-body-content [style*="text-align:center"] {
                           text-align: center !important;
+                        }
+                        .email-body-content center {
+                          display: block;
                         }
                         .email-body-content [align="center"] img,
                         .email-body-content [align="center"] button,
-                        .email-body-content [align="center"] a {
+                        .email-body-content [align="center"] a,
+                        .email-body-content center img,
+                        .email-body-content center button,
+                        .email-body-content [style*="text-align:center"] img,
+                        .email-body-content [style*="text-align:center"] button,
+                        .email-body-content [style*="text-align:center"] > a {
                           display: inline-block;
                         }
-                        .email-body-content [align="center"] td {
-                          text-align: center !important;
-                        }
-                        /* Handle <center> tag */
-                        .email-body-content center {
-                          text-align: center !important;
+                        .email-body-content [align="center"] a img,
+                        .email-body-content [style*="text-align:center"] a img,
+                        .email-body-content center a img {
                           display: block;
                         }
-                        .email-body-content center img,
-                        .email-body-content center button {
-                          display: inline-block;
-                        }
-                        /* Handle CSS-based centering with text-align */
-                        .email-body-content td[style*="text-align: center"],
-                        .email-body-content td[style*="text-align:center"],
-                        .email-body-content th[style*="text-align: center"],
-                        .email-body-content th[style*="text-align:center"] {
-                          text-align: center !important;
-                        }
-                        .email-body-content td[style*="text-align: center"] img,
-                        .email-body-content td[style*="text-align:center"] img,
-                        .email-body-content td[style*="text-align: center"] button,
-                        .email-body-content td[style*="text-align:center"] button,
-                        .email-body-content th[style*="text-align: center"] img,
-                        .email-body-content th[style*="text-align:center"] img {
-                          display: inline-block !important;
-                        }
-                        /* Handle margin-based centering */
-                        .email-body-content img[style*="margin-left: auto"],
+                        /* Handle margin-based centering - match all variations */
                         .email-body-content img[style*="margin-left:auto"],
                         .email-body-content img[style*="margin:0 auto"],
                         .email-body-content img[style*="margin: 0 auto"] {
@@ -1518,58 +1482,10 @@ export function EmailPage() {
                           margin-left: auto !important;
                           margin-right: auto !important;
                         }
-                        /* Center images in paragraph tags */
-                        .email-body-content p[style*="text-align: center"] img,
-                        .email-body-content p[style*="text-align:center"] img,
-                        .email-body-content p[align="center"] img {
-                          display: inline-block !important;
-                        }
-                        /* Center buttons in containers */
-                        .email-body-content div[style*="text-align: center"] button,
-                        .email-body-content div[style*="text-align:center"] button,
-                        .email-body-content div[align="center"] button,
-                        .email-body-content td[style*="text-align: center"] button,
-                        .email-body-content td[style*="text-align:center"] button {
-                          display: inline-block !important;
-                        }
-                        /* Preserve text-align center on div and p elements */
-                        .email-body-content div[style*="text-align: center"],
-                        .email-body-content div[style*="text-align:center"],
-                        .email-body-content p[style*="text-align: center"],
-                        .email-body-content p[style*="text-align:center"] {
-                          text-align: center !important;
-                        }
-                        /* Ensure inline elements in centered containers are properly centered */
-                        /* Only apply to specific elements that need it, not all children */
-                        .email-body-content div[style*="text-align: center"] > img,
-                        .email-body-content div[style*="text-align:center"] > img,
-                        .email-body-content p[style*="text-align: center"] > img,
-                        .email-body-content p[style*="text-align:center"] > img,
-                        .email-body-content div[style*="text-align: center"] > a,
-                        .email-body-content div[style*="text-align:center"] > a,
-                        .email-body-content p[style*="text-align: center"] > a,
-                        .email-body-content p[style*="text-align:center"] > a {
-                          display: inline-block;
-                        }
-                        /* Handle images wrapped in links inside centered containers */
-                        .email-body-content [align="center"] a,
-                        .email-body-content [style*="text-align: center"] a,
-                        .email-body-content center a {
-                          display: inline-block;
-                        }
-                        .email-body-content [align="center"] a img,
-                        .email-body-content [style*="text-align: center"] a img,
-                        .email-body-content center a img {
-                          display: block;
-                        }
-                        /* Remove underline on hover for all links and icons */
+                        /* Remove underline on all links */
                         .email-body-content a,
                         .email-body-content a *,
-                        .email-body-content a img {
-                          text-decoration: none !important;
-                          border-bottom: none !important;
-                          box-shadow: none !important;
-                        }
+                        .email-body-content a img,
                         .email-body-content a:hover,
                         .email-body-content a:hover *,
                         .email-body-content a:hover img {
@@ -1577,14 +1493,13 @@ export function EmailPage() {
                           border-bottom: none !important;
                           box-shadow: none !important;
                         }
-                        /* Handle double line breaks in quoted emails - convert to single */
+                        /* Handle double line breaks in quoted emails */
                         .email-body-content blockquote br {
                           display: none;
                         }
                         .email-body-content blockquote br + br {
                           display: block;
                         }
-                        /* Styles for quoted email headers in replies */
                         .email-body-content blockquote {
                           margin: 8px 0;
                           padding: 6px 10px;
@@ -1790,149 +1705,27 @@ export function EmailPage() {
                   </div>
 
                   {/* Quick Preset Templates - show different templates based on mode */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-2">
-                      Quick templates:
-                    </label>
-                    {composeState.mode === 'reply' && (
+                  {AI_TEMPLATES[composeState.mode] && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">
+                        Quick templates:
+                      </label>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Professional and concise reply'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Professional
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Friendly and casual tone'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Friendly
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Keep it very brief, just 2-3 sentences'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Brief
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Express gratitude and be enthusiastic'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Grateful
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Propose a meeting or call to discuss further'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Request Meeting
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Ask follow-up questions to clarify details'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Ask Questions
-                        </button>
+                        {AI_TEMPLATES[composeState.mode].map((template) => (
+                          <button
+                            key={template.label}
+                            onClick={() => setComposeState({
+                              ...composeState,
+                              aiInstructions: template.instructions,
+                            })}
+                            className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                          >
+                            {template.label}
+                          </button>
+                        ))}
                       </div>
-                    )}
-                    {composeState.mode === 'forward' && (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Add a brief note introducing the forwarded email'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          With Introduction
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Highlight the key points from the original email'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Highlight Key Points
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Request action or response from recipient'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Request Action
-                        </button>
-                      </div>
-                    )}
-                    {composeState.mode === 'compose' && (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Write a professional meeting request'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Meeting Request
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Write a follow-up email on a previous conversation'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Follow Up
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Write a thank you email'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Thank You
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Write an inquiry about a product or service'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Inquiry
-                        </button>
-                        <button
-                          onClick={() => setComposeState({
-                            ...composeState,
-                            aiInstructions: 'Write a proposal or pitch'
-                          })}
-                          className="px-3 py-1.5 text-xs bg-white border border-purple-300 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
-                        >
-                          Proposal
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
