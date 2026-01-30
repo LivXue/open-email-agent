@@ -30,17 +30,18 @@ const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT || '2821';
 const API_BASE = `http://localhost:${BACKEND_PORT}`;
 
 /**
- * Detect the optimal width for email content based on its HTML structure
- * Returns the recommended max-width in pixels
+ * Detect the optimal width range for email content based on its HTML structure
+ * Returns { minWidth, maxWidth } in pixels
  */
-function getEmailOptimalWidth(html: string): number {
+function getEmailOptimalWidthRange(html: string): { minWidth: number; maxWidth: number } {
   const temp = document.createElement('div');
   temp.innerHTML = html;
 
+  let minWidth = 280; // Default minimum width for basic content
+  let maxWidth = 600; // Default maximum width for typical email content
+
   // Check for tables with explicit widths
   const tables = temp.querySelectorAll('table');
-  let maxTableWidth = 0;
-
   for (const table of tables) {
     const widthAttr = table.getAttribute('width');
     const styleAttr = table.getAttribute('style');
@@ -48,55 +49,103 @@ function getEmailOptimalWidth(html: string): number {
     // Check width attribute
     if (widthAttr) {
       if (/^\d+$/.test(widthAttr)) {
-        maxTableWidth = Math.max(maxTableWidth, parseInt(widthAttr));
+        const tableWidth = parseInt(widthAttr);
+        minWidth = Math.max(minWidth, tableWidth);
+        maxWidth = Math.max(maxWidth, tableWidth);
       } else if (widthAttr.includes('%')) {
         // Percentage widths - assume 600px base for 100%
         const percent = parseInt(widthAttr);
         if (percent <= 100) {
-          maxTableWidth = Math.max(maxTableWidth, 600);
+          const calculatedWidth = Math.round(600 * (percent / 100));
+          minWidth = Math.max(minWidth, calculatedWidth);
+          maxWidth = Math.max(maxWidth, calculatedWidth);
         }
       }
     }
 
     // Check style attribute for width
     if (styleAttr) {
-      const widthMatch = styleAttr.match(/width:\s*(\d+)px/i);
-      if (widthMatch) {
-        maxTableWidth = Math.max(maxTableWidth, parseInt(widthMatch[1]));
+      const minWidthMatch = styleAttr.match(/min-width:\s*(\d+)px/i);
+      if (minWidthMatch) {
+        minWidth = Math.max(minWidth, parseInt(minWidthMatch[1]));
+      }
+
+      const tableMaxWidthMatch = styleAttr.match(/max-width:\s*(\d+)px/i);
+      if (tableMaxWidthMatch) {
+        maxWidth = Math.max(maxWidth, parseInt(tableMaxWidthMatch[1]));
+      }
+
+      const tableWidthMatch = styleAttr.match(/width:\s*(\d+)px/i);
+      if (tableWidthMatch) {
+        const tableWidth = parseInt(tableWidthMatch[1]);
+        minWidth = Math.max(minWidth, tableWidth);
+        maxWidth = Math.max(maxWidth, tableWidth);
       }
     }
   }
 
-  // Check for large images
+  // Check for images with explicit widths
   const images = temp.querySelectorAll('img');
-  let maxImageWidth = 0;
-
   for (const img of images) {
     const widthAttr = img.getAttribute('width');
     const styleAttr = img.getAttribute('style');
 
     if (widthAttr && /^\d+$/.test(widthAttr)) {
-      maxImageWidth = Math.max(maxImageWidth, parseInt(widthAttr));
+      const imgWidth = parseInt(widthAttr);
+      // Only consider images larger than 100px for minimum width
+      if (imgWidth > 100) {
+        minWidth = Math.max(minWidth, imgWidth);
+      }
+      maxWidth = Math.max(maxWidth, imgWidth);
     }
 
     if (styleAttr) {
-      const widthMatch = styleAttr.match(/width:\s*(\d+)px/i);
-      if (widthMatch) {
-        maxImageWidth = Math.max(maxImageWidth, parseInt(widthMatch[1]));
+      const imgWidthMatch = styleAttr.match(/width:\s*(\d+)px/i);
+      if (imgWidthMatch) {
+        const imgWidth = parseInt(imgWidthMatch[1]);
+        if (imgWidth > 100) {
+          minWidth = Math.max(minWidth, imgWidth);
+        }
+        maxWidth = Math.max(maxWidth, imgWidth);
       }
     }
   }
 
-  // Determine optimal width based on content
-  const contentWidth = Math.max(maxTableWidth, maxImageWidth);
+  // Check for containers with explicit widths (divs, tds, etc.)
+  const containers = temp.querySelectorAll('div, td, th');
+  for (const container of containers) {
+    const styleAttr = container.getAttribute('style');
 
-  // If content has explicit width, use it (with some padding)
-  if (contentWidth > 0 && contentWidth <= 800) {
-    return contentWidth + 40; // Add padding
+    if (styleAttr) {
+      const minWidthMatch = styleAttr.match(/min-width:\s*(\d+)px/i);
+      if (minWidthMatch) {
+        minWidth = Math.max(minWidth, parseInt(minWidthMatch[1]));
+      }
+
+      const widthMatch = styleAttr.match(/width:\s*(\d+)px/i);
+      if (widthMatch) {
+        const containerWidth = parseInt(widthMatch[1]);
+        // Fixed width containers should influence both min and max
+        if (containerWidth > 150) {
+          minWidth = Math.max(minWidth, containerWidth);
+        }
+        maxWidth = Math.max(maxWidth, containerWidth);
+      }
+    }
   }
 
-  // Default to 600px for typical email content
-  return 600;
+  // Add padding to the calculated widths
+  const padding = 40;
+  minWidth = minWidth + padding;
+  maxWidth = maxWidth + padding;
+
+  // Cap max width at 800px for readability
+  maxWidth = Math.min(maxWidth, 800);
+
+  // Ensure minimum width is at least 280px but not more than max
+  minWidth = Math.max(280, Math.min(minWidth, maxWidth));
+
+  return { minWidth, maxWidth };
 }
 
 /**
@@ -147,7 +196,7 @@ function sanitizeEmailHtml(html: string): string {
 
     // Detect if this is a small UI icon (navigation, buttons, etc.)
     const isSmallIcon = (
-      maxDim > 0 && maxDim <= 32 ||
+      maxDim > 0 && maxDim <= 24 ||
       /icon|button|nav|badge/i.test(src) ||
       /icon|button|nav|badge/i.test(alt) ||
       /icon|button|nav/i.test(classAttr)
@@ -160,33 +209,163 @@ function sanitizeEmailHtml(html: string): string {
       /logo|brand/i.test(classAttr)
     );
 
+    // Detect if this is a QR code
+    // Note: exclude "download" alone as it matches app store buttons
+    const isQRCode = (
+      /qr|qrcode|scan/i.test(src) ||
+      /qr|qrcode|scan/i.test(alt) ||
+      /qr|qrcode/i.test(classAttr)
+    );
+
+    // Detect if this is an app store badge (App Store, Google Play, Microsoft Store)
+    // Must have app store related keywords in src or alt, not just class
+    const isAppStoreBadge = (
+      (/app.?store|google.?play|microsoft|get.?it.?on|download.?on/i.test(src) ||
+       /app.?store|google.?play|microsoft|get.?it.?on|download.?on/i.test(alt)) &&
+      !/premium|subscribe|try|month/i.test(alt) // Exclude non-app-store buttons
+    );
+
+    // Detect if this is a content image that should be displayed larger
+    // (e.g., illustrations, charts, diagrams in emails)
+    const isContentImage = (
+      width >= 50 && height >= 50 &&
+      !isAvatar && !isSmallIcon && !isLogo && !isQRCode && !isAppStoreBadge
+    );
+
+    // Check if image is in a center-aligned container
+    // Need to check the style attribute string, not element.style property
+    const checkElementCentered = (element: HTMLElement | null): boolean => {
+      if (!element) return false;
+
+      // Check align attribute
+      if (element.getAttribute('align') === 'center') {
+        return true;
+      }
+
+      // Check style attribute string (not element.style property!)
+      const styleAttr = element.getAttribute('style') || '';
+      if (styleAttr.includes('text-align') && /text-align\s*:\s*center/i.test(styleAttr)) {
+        return true;
+      }
+
+      // Check for margin-based centering
+      if (/margin\s*:\s*.*auto/i.test(styleAttr) ||
+          (styleAttr.includes('margin-left') && /margin-left\s*:\s*auto/i.test(styleAttr))) {
+        return true;
+      }
+
+      // Check tag name for <center> tag
+      if (element.tagName === 'CENTER') {
+        return true;
+      }
+
+      return false;
+    };
+
+    // Check current parent and traverse up to find centering
+    let currentParent = img.parentElement;
+    let isCentered = false;
+    let centeredParent: HTMLElement | null = null;
+
+    // Check up to 4 levels up for centering (emails often have nested tables)
+    // Also skip <a> tags when checking - they don't affect layout
+    for (let i = 0; i < 4 && currentParent; i++) {
+      // Skip anchor tags - they don't affect centering
+      if (currentParent.tagName !== 'A' && checkElementCentered(currentParent)) {
+        isCentered = true;
+        centeredParent = currentParent;
+        break;
+      }
+      currentParent = currentParent.parentElement;
+    }
+
+    // Special case: if immediate parent is a centered cell but we skipped it,
+    // check one more level
+    if (!isCentered && img.parentElement && img.parentElement.tagName === 'A') {
+      const anchorParent = img.parentElement.parentElement;
+      if (anchorParent && checkElementCentered(anchorParent)) {
+        isCentered = true;
+        centeredParent = anchorParent;
+      }
+    }
+
+    // Apply centering if parent is centered
+    const applyCentering = () => {
+      if (isCentered) {
+        const currentStyle = img.getAttribute('style') || '';
+
+        // Check if image already has display: block with margin auto (already centered)
+        const hasBlockWithMarginAuto = /display\s*:\s*block/i.test(currentStyle) &&
+                                      (/margin\s*:\s*.*auto/i.test(currentStyle) ||
+                                       (/margin-left\s*:\s*auto/i.test(currentStyle) && /margin-right\s*:\s*auto/i.test(currentStyle)));
+
+        // Only set display if not already set to block with margin auto
+        if (!hasBlockWithMarginAuto && !/display\s*:/i.test(currentStyle)) {
+          img.style.display = 'inline-block';
+        }
+
+        // For table cells, also apply vertical alignment
+        if (centeredParent && (centeredParent.tagName === 'TD' || centeredParent.tagName === 'TH')) {
+          if (!/vertical-align\s*:/i.test(currentStyle)) {
+            img.style.verticalAlign = 'middle';
+          }
+        }
+
+        // If the parent is a table cell with text-align: center, the image should be inline
+        if (centeredParent && (centeredParent.tagName === 'TD' || centeredParent.tagName === 'TH')) {
+          const parentStyle = centeredParent.getAttribute('style') || '';
+          if (/text-align\s*:\s*center/i.test(parentStyle) && !/display\s*:/i.test(currentStyle)) {
+            img.style.display = 'inline-block';
+          }
+        }
+      }
+    };
+
+    // Preserve original aspect ratio by not setting explicit width/height
+    // Only set max constraints to prevent overflow
     if (isAvatar) {
       // For avatars/profile photos
       img.style.maxWidth = '100px';
       img.style.maxHeight = '100px';
-      img.style.width = 'auto';
-      img.style.height = 'auto';
       img.style.objectFit = 'cover';
       img.style.borderRadius = '50%';
+      applyCentering();
     } else if (isSmallIcon) {
-      // For small UI icons
+      // For small UI icons - preserve aspect ratio with max constraints
       img.style.maxWidth = '24px';
       img.style.maxHeight = '24px';
-      img.style.width = 'auto';
-      img.style.height = 'auto';
       img.style.objectFit = 'contain';
+      applyCentering();
     } else if (isLogo) {
-      // For all logos - unified treatment with max height limit
-      // This ensures all logos (LinkedIn, Microsoft, AMD, etc.) are consistent
+      // For all logos - preserve aspect ratio with max constraints
       img.style.maxHeight = '40px';
       img.style.width = 'auto';
-      img.style.height = 'auto';
       img.style.objectFit = 'contain';
       img.style.flexShrink = '0';
+      applyCentering();
+    } else if (isQRCode) {
+      // For QR codes - preserve aspect ratio with max constraints
+      img.style.maxWidth = '120px';
+      img.style.maxHeight = '120px';
+      img.style.objectFit = 'contain';
+      applyCentering();
+    } else if (isAppStoreBadge) {
+      // For app store badges - preserve aspect ratio with max constraints
+      img.style.maxHeight = '40px';
+      img.style.width = 'auto';
+      img.style.objectFit = 'contain';
+      applyCentering();
+    } else if (isContentImage) {
+      // For content images - allow reasonable size but prevent overflow
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '400px';
+      img.style.objectFit = 'contain';
+      applyCentering();
     } else {
-      // For regular images
+      // For other images - responsive default
       img.style.maxWidth = '100%';
       img.style.height = 'auto';
+      applyCentering();
     }
   });
 
@@ -197,6 +376,17 @@ function sanitizeEmailHtml(html: string): string {
     const existingStyle = table.getAttribute('style') || '';
     if (!existingStyle.includes('max-width')) {
       table.style.maxWidth = '100%';
+    }
+
+    // Check if table should be centered
+    const tableAlign = table.getAttribute('align');
+    const tableStyle = table.getAttribute('style') || '';
+    const isTableCentered = tableAlign === 'center' ||
+                           (tableStyle.includes('margin') && /margin\s*:\s*.*auto/i.test(tableStyle));
+
+    if (isTableCentered) {
+      table.style.marginLeft = 'auto';
+      table.style.marginRight = 'auto';
     }
   });
 
@@ -214,11 +404,13 @@ function sanitizeEmailHtml(html: string): string {
           cell.setAttribute('padding', '8');
         }
       }
-      // Check style attribute for padding
+      // Check style attribute for padding and background
       const style = cell.getAttribute('style') || '';
+      let newStyle = style;
+      
       if (style.includes('padding')) {
         // Reduce padding values in inline styles
-        const newStyle = style
+        newStyle = newStyle
           .replace(/padding:\s*(\d+)px/g, (match, val) => {
             const num = parseInt(val);
             return num > 12 ? `padding: ${Math.floor(num * 0.5)}px` : match;
@@ -227,11 +419,44 @@ function sanitizeEmailHtml(html: string): string {
             const num = parseInt(val);
             return num > 8 ? `padding-${dir}: ${Math.floor(num * 0.5)}px` : match;
           });
-        if (newStyle !== style) {
-          cell.setAttribute('style', newStyle);
-        }
+      }
+      
+      // Remove gray background colors from cells that contain only images
+      const cellImages = cell.querySelectorAll('img');
+      const cellText = cell.textContent?.trim() || '';
+      if (cellImages.length > 0 && cellText === '') {
+        // Cell contains only images, remove background color
+        newStyle = newStyle.replace(/background-color\s*:\s*[^;]+;?/gi, '');
+        newStyle = newStyle.replace(/background\s*:\s*[^;]+;?/gi, '');
+      }
+      
+      if (newStyle !== style) {
+        cell.setAttribute('style', newStyle);
       }
     });
+  });
+
+  // Process all elements with center alignment to preserve it
+  const centerAlignedElements = temp.querySelectorAll('[align="center"], center, [style*="text-align: center"], [style*="text-align:center"], [style*="margin: 0 auto"], [style*="margin-left: auto"]');
+  centerAlignedElements.forEach(el => {
+    const style = el.getAttribute('style') || '';
+
+    // Preserve text-align: center
+    if (/text-align\s*:\s*center/i.test(style)) {
+      el.style.textAlign = 'center';
+    }
+
+    // Preserve margin-based centering
+    if (/margin\s*:\s*.*auto/i.test(style) ||
+        (/margin-left\s*:\s*auto/i.test(style) && /margin-right\s*:\s*auto/i.test(style))) {
+      el.style.marginLeft = 'auto';
+      el.style.marginRight = 'auto';
+    }
+
+    // For elements with align="center" attribute
+    if (el.getAttribute('align') === 'center') {
+      el.style.textAlign = 'center';
+    }
   });
 
   // Process divs that might have excessive margins
@@ -255,13 +480,19 @@ function sanitizeEmailHtml(html: string): string {
     }
   });
 
-  // Process all links to open in new tab
+  // Process all links to open in new tab and remove underline styling
   const links = temp.querySelectorAll('a');
   links.forEach(link => {
     // Set target to _blank to open in new tab
     link.setAttribute('target', '_blank');
     // Set rel for security
     link.setAttribute('rel', 'noopener noreferrer');
+    // Remove underline styling from links (but preserve box-shadow for buttons)
+    const currentStyle = link.getAttribute('style') || '';
+    if (!currentStyle.includes('box-shadow')) {
+      link.style.textDecoration = 'none';
+      link.style.borderBottom = 'none';
+    }
   });
 
   // Process reply/forward email headers to improve visual formatting
@@ -299,11 +530,11 @@ function sanitizeEmailHtml(html: string): string {
         el.style.borderLeft = '3px solid #e5e7eb';
         el.style.paddingLeft = '12px';
         el.style.marginLeft = '0';
-        el.style.marginTop = '12px';
-        el.style.marginBottom = '12px';
+        el.style.marginTop = '8px';
+        el.style.marginBottom = '8px';
         el.style.color = '#6b7280';
         el.style.fontSize = '14px';
-        el.style.lineHeight = '1.5';
+        el.style.lineHeight = '1.4';
       }
     }
   });
@@ -313,7 +544,7 @@ function sanitizeEmailHtml(html: string): string {
   hrs.forEach(hr => {
     hr.style.border = 'none';
     hr.style.borderTop = '1px solid #e5e7eb';
-    hr.style.margin = '16px 0';
+    hr.style.margin = '8px 0';
   });
 
   return temp.innerHTML;
@@ -621,24 +852,31 @@ export function EmailPage() {
   };
 
   // Filter emails by search query and filter type
-  const filteredEmails = currentFolderState.emails.filter((email) => {
-    // Apply filter
-    if (filter === 'unread' && !email.isUnread) return false;
-    if (filter === 'starred' && !email.isFlagged) return false;
+  const filteredEmails = currentFolderState.emails
+    .filter((email) => {
+      // Apply filter
+      if (filter === 'unread' && !email.isUnread) return false;
+      if (filter === 'starred' && !email.isFlagged) return false;
 
-    // Apply search
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        email.subject.toLowerCase().includes(query) ||
-        email.from.toLowerCase().includes(query) ||
-        email.fromName.toLowerCase().includes(query) ||
-        email.body.toLowerCase().includes(query)
-      );
-    }
+      // Apply search
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          email.subject.toLowerCase().includes(query) ||
+          email.from.toLowerCase().includes(query) ||
+          email.fromName.toLowerCase().includes(query) ||
+          email.body.toLowerCase().includes(query)
+        );
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by date, newest first
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA;
+    });
 
   // Format file size
   const formatFileSize = (bytes: number): string => {
@@ -970,11 +1208,11 @@ export function EmailPage() {
             </div>
           ) : (
             // Email list
-            <div className="divide-y divide-gray-200 w-full overflow-hidden">
+            <div className="divide-y divide-gray-200 w-full">
               {filteredEmails.map((email) => (
                 <div
                   key={email.uid}
-                  className={`w-full overflow-hidden bg-white hover:bg-gray-50 transition-colors ${
+                  className={`w-full bg-white hover:bg-gray-50 transition-colors ${
                     email.isUnread ? 'bg-white' : 'bg-gray-50/50'
                   }`}
                 >
@@ -1090,29 +1328,32 @@ export function EmailPage() {
                   </div>
 
                   {/* Expanded content */}
-                  {expandedEmail === email.uid && (
-                    <div className="border-t border-gray-200 p-3 bg-gray-50 w-full overflow-hidden">
-                      {/* Email headers - centered alignment with body */}
-                      <div
-                        className="mb-2 text-sm w-full bg-white rounded-lg p-3 shadow-sm border border-gray-100"
-                        style={{
-                          maxWidth: `${getEmailOptimalWidth(email.body)}px`,
-                          margin: '0 auto',
-                        }}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">From:</span>
-                          <span className="text-gray-900 break-all flex-1">{email.fromName || email.from}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">To:</span>
-                          <span className="text-gray-900 break-all flex-1">{email.to.join(', ')}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">Date:</span>
-                          <span className="text-gray-900 break-all flex-1">{email.date}</span>
-                        </div>
-                      </div>
+                  {expandedEmail === email.uid && (() => {
+                    const widthRange = getEmailOptimalWidthRange(email.body);
+                    return (
+                        <div className="border-t border-gray-200 p-3 bg-gray-50 w-full">
+                          {/* Email headers - centered alignment with body */}
+                          <div
+                            className="mb-2 text-sm w-full bg-white rounded-lg p-3 shadow-sm border border-gray-100"
+                            style={{
+                              minWidth: `${widthRange.minWidth}px`,
+                              maxWidth: `${widthRange.maxWidth}px`,
+                              margin: '0 auto',
+                            }}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">From:</span>
+                              <span className="text-gray-900 break-all flex-1">{email.fromName || email.from}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">To:</span>
+                              <span className="text-gray-900 break-all flex-1">{email.to.join(', ')}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-gray-600 flex-shrink-0 w-16 text-sm">Date:</span>
+                              <span className="text-gray-900 break-all flex-1">{email.date}</span>
+                            </div>
+                          </div>
 
                       {/* Email body - render HTML content safely */}
                       <div className="mb-2 w-full">
@@ -1143,7 +1384,8 @@ export function EmailPage() {
                             <div
                               className="email-body-content w-full bg-white rounded-lg p-3 shadow-sm border border-gray-100"
                               style={{
-                                maxWidth: `${getEmailOptimalWidth(email.body)}px`,
+                                minWidth: `${widthRange.minWidth}px`,
+                                maxWidth: `${widthRange.maxWidth}px`,
                                 margin: '0 auto',
                               }}
                               dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.body) }}
@@ -1175,6 +1417,110 @@ export function EmailPage() {
                         .email-body-content tr {
                           height: auto;
                         }
+                        /* Preserve center alignment for images and other elements */
+                        .email-body-content [align="center"] {
+                          text-align: center !important;
+                        }
+                        .email-body-content [align="center"] img,
+                        .email-body-content [align="center"] button,
+                        .email-body-content [align="center"] a {
+                          display: inline-block;
+                        }
+                        .email-body-content [align="center"] td {
+                          text-align: center !important;
+                        }
+                        /* Handle <center> tag */
+                        .email-body-content center {
+                          text-align: center !important;
+                          display: block;
+                        }
+                        .email-body-content center img,
+                        .email-body-content center button {
+                          display: inline-block;
+                        }
+                        /* Handle CSS-based centering with text-align */
+                        .email-body-content td[style*="text-align: center"],
+                        .email-body-content td[style*="text-align:center"],
+                        .email-body-content th[style*="text-align: center"],
+                        .email-body-content th[style*="text-align:center"] {
+                          text-align: center !important;
+                        }
+                        .email-body-content td[style*="text-align: center"] img,
+                        .email-body-content td[style*="text-align:center"] img,
+                        .email-body-content td[style*="text-align: center"] button,
+                        .email-body-content td[style*="text-align:center"] button,
+                        .email-body-content th[style*="text-align: center"] img,
+                        .email-body-content th[style*="text-align:center"] img {
+                          display: inline-block !important;
+                        }
+                        /* Handle margin-based centering */
+                        .email-body-content img[style*="margin-left: auto"],
+                        .email-body-content img[style*="margin-left:auto"],
+                        .email-body-content img[style*="margin:0 auto"],
+                        .email-body-content img[style*="margin: 0 auto"] {
+                          display: block !important;
+                          margin-left: auto !important;
+                          margin-right: auto !important;
+                        }
+                        /* Center images in paragraph tags */
+                        .email-body-content p[style*="text-align: center"] img,
+                        .email-body-content p[style*="text-align:center"] img,
+                        .email-body-content p[align="center"] img {
+                          display: inline-block !important;
+                        }
+                        /* Center buttons in containers */
+                        .email-body-content div[style*="text-align: center"] button,
+                        .email-body-content div[style*="text-align:center"] button,
+                        .email-body-content div[align="center"] button,
+                        .email-body-content td[style*="text-align: center"] button,
+                        .email-body-content td[style*="text-align:center"] button {
+                          display: inline-block !important;
+                        }
+                        /* Preserve text-align center on div and p elements */
+                        .email-body-content div[style*="text-align: center"],
+                        .email-body-content div[style*="text-align:center"],
+                        .email-body-content p[style*="text-align: center"],
+                        .email-body-content p[style*="text-align:center"] {
+                          text-align: center !important;
+                        }
+                        /* Ensure inline elements in centered containers are properly centered */
+                        /* Only apply to specific elements that need it, not all children */
+                        .email-body-content div[style*="text-align: center"] > img,
+                        .email-body-content div[style*="text-align:center"] > img,
+                        .email-body-content p[style*="text-align: center"] > img,
+                        .email-body-content p[style*="text-align:center"] > img,
+                        .email-body-content div[style*="text-align: center"] > a,
+                        .email-body-content div[style*="text-align:center"] > a,
+                        .email-body-content p[style*="text-align: center"] > a,
+                        .email-body-content p[style*="text-align:center"] > a {
+                          display: inline-block;
+                        }
+                        /* Handle images wrapped in links inside centered containers */
+                        .email-body-content [align="center"] a,
+                        .email-body-content [style*="text-align: center"] a,
+                        .email-body-content center a {
+                          display: inline-block;
+                        }
+                        .email-body-content [align="center"] a img,
+                        .email-body-content [style*="text-align: center"] a img,
+                        .email-body-content center a img {
+                          display: block;
+                        }
+                        /* Remove underline on hover for all links and icons */
+                        .email-body-content a,
+                        .email-body-content a *,
+                        .email-body-content a img {
+                          text-decoration: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                        }
+                        .email-body-content a:hover,
+                        .email-body-content a:hover *,
+                        .email-body-content a:hover img {
+                          text-decoration: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                        }
                         /* Handle double line breaks in quoted emails - convert to single */
                         .email-body-content blockquote br {
                           display: none;
@@ -1184,8 +1530,8 @@ export function EmailPage() {
                         }
                         /* Styles for quoted email headers in replies */
                         .email-body-content blockquote {
-                          margin: 12px 0;
-                          padding: 8px 12px;
+                          margin: 8px 0;
+                          padding: 6px 10px;
                           border-left: 3px solid #d1d5db;
                           background-color: #f9fafb;
                           color: #4b5563;
@@ -1194,14 +1540,14 @@ export function EmailPage() {
                         .email-body-content hr {
                           border: none;
                           border-top: 1px solid #e5e7eb;
-                          margin: 16px 0;
+                          margin: 8px 0;
                         }
                         /* Gmail/Outlook style quoted content */
                         .email-body-content .gmail_quote,
                         .email-body-content .OutlookMessageHeader {
                           border-left: 3px solid #d1d5db;
-                          padding-left: 12px;
-                          margin: 12px 0;
+                          padding-left: 10px;
+                          margin: 8px 0;
                           color: #6b7280;
                         }
                       `}</style>
@@ -1257,7 +1603,8 @@ export function EmailPage() {
                         </button>
                       </div>
                     </div>
-                  )}
+                );
+              })()}
                 </div>
               ))}
             </div>

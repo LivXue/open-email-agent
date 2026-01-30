@@ -86,6 +86,7 @@ The framework uses **subagents** for task isolation and parallelization:
 - Email cache persisted to `.emails_cache.json` (survives server restarts)
 - Session-isolated filesystems in `agent_fs/session_{id}_{hash}/`
 - API endpoints at `/api/` routes, WebSocket at `/ws/chat/{session_id}`
+- Tavily search integration for web search capabilities
 
 **Frontend** (`web_app/frontend/`):
 - React 18 + TypeScript with Vite
@@ -97,14 +98,27 @@ The framework uses **subagents** for task isolation and parallelization:
 ### Email Tools (`lib/email_tools.py`)
 
 Email operations are implemented as LangChain tools:
+
+**Core Email Operations:**
+- `email_dashboard`: Get comprehensive email statistics and overview
 - `read_emails`: Fetch emails with filtering (folder, sender, subject, etc.)
 - `send_email`: Compose and send emails
-- `delete_emails`: Delete emails
-- `move_emails`: Move emails between folders
-- `flag_emails`: Mark as important/unread/seen
-- `search_emails`: Search email content
+- `delete_email`: Delete emails
+- `move_email`: Move emails between folders
+- `flag_email`: Mark as important/unread/seen
+- `search_address_book`: Search contacts by name, email, or group
+- `modify_address_book`: Add/edit/delete contacts and groups
+- `list_folders`: List all available mailbox folders
+- `download_attachments`: Download email attachments
 
 Tools use `imap_tools` library and support proxy configuration via `better-proxy`.
+
+### Address Book (`lib/address_book.json`)
+
+Contact management is persisted to `lib/address_book.json`:
+- AI can search, add, edit, and delete contacts
+- Contacts support multiple email addresses and group assignments
+- Used by the AI for quick email composition and filtering
 
 ### Session Management
 
@@ -113,6 +127,13 @@ Each chat session maintains:
 - Independent email cache (cleaned up on session deletion)
 - Dedicated filesystem directory (`agent_fs/session_{id}_{hash}/`)
 - Unique conversation history persisted via LangGraph checkpointers
+
+### Knowledge Base (`knowledge/`)
+
+The `knowledge/` directory stores persistent information that agents can access:
+- Used by the MemoryMiddleware to load context into agent prompts
+- Can store AGENTS.md files with long-term knowledge
+- AI can read and write files here for cross-session knowledge persistence
 
 ### Environment Configuration
 
@@ -123,6 +144,7 @@ The web application uses `.env` file in `web_app/`:
 - `OPENAI_API_KEY`: API key
 - `OPENAI_BASE_URL`: API endpoint (supports OpenAI-compatible APIs)
 - `DISPLAY_REASONING`: Show model reasoning (True/False)
+- `TAVILY_API_KEY`: Tavily search API key for web search capabilities
 
 **Email Settings:**
 - `USERNAME`: Email address
@@ -131,8 +153,8 @@ The web application uses `.env` file in `web_app/`:
 - `IMAP_PORT`/`SMTP_PORT`: Port numbers
 
 **Network:**
-- `BACKEND_PORT`: Backend server port (default: 8001)
-- `FRONTEND_PORT`: Frontend dev server port (default: 3001)
+- `BACKEND_PORT`: Backend server port (default: 2821)
+- `FRONTEND_PORT`: Frontend dev server port (default: 2922)
 
 ## Development Notes
 
@@ -153,6 +175,14 @@ When adding new tools that need file access:
 2. Backend provides `upload_files()` and `download_files()` for batch operations
 3. File operations return standardized `FileUploadResponse`/`FileDownloadResponse` with error codes
 4. `FileOperationError` defines standard error types (file_not_found, permission_denied, etc.)
+
+### Adding New Tools
+
+New LangChain tools for the agent should:
+1. Be decorated with `@tool` from `langchain_core.tools`
+2. Accept only JSON-serializable types (str, int, bool, list, dict)
+3. Use context variables (like `chat_session_id_ctx`) for session isolation
+4. Be imported in `web_app/backend/api_server.py` and passed to the agent constructor
 
 ### Email Cache
 
