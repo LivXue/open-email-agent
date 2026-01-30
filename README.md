@@ -22,7 +22,7 @@
 
 ---
 
-<div align="center">
+<div>
 
 ## 🎉 What's New in v0.0.4
 
