@@ -423,13 +423,15 @@ def _write_file_tool_generator(
             return res.error
         # If backend returns state update, wrap into Command with ToolMessage
         if res.files_update is not None:
+            # Ensure tool_call_id is not None
+            tool_call_id = runtime.tool_call_id or f"file_update_{id(res.path)}"
             return Command(
                 update={
                     "files": res.files_update,
                     "messages": [
                         ToolMessage(
                             content=f"Updated file {res.path}",
-                            tool_call_id=runtime.tool_call_id,
+                            tool_call_id=tool_call_id,
                         )
                     ],
                 }
@@ -449,13 +451,15 @@ def _write_file_tool_generator(
             return res.error
         # If backend returns state update, wrap into Command with ToolMessage
         if res.files_update is not None:
+            # Ensure tool_call_id is not None
+            tool_call_id = runtime.tool_call_id or f"file_update_{id(res.path)}"
             return Command(
                 update={
                     "files": res.files_update,
                     "messages": [
                         ToolMessage(
                             content=f"Updated file {res.path}",
-                            tool_call_id=runtime.tool_call_id,
+                            tool_call_id=tool_call_id,
                         )
                     ],
                 }
@@ -500,13 +504,15 @@ def _edit_file_tool_generator(
         if res.error:
             return res.error
         if res.files_update is not None:
+            # Ensure tool_call_id is not None
+            tool_call_id = runtime.tool_call_id or f"file_edit_{id(res.path)}"
             return Command(
                 update={
                     "files": res.files_update,
                     "messages": [
                         ToolMessage(
                             content=f"Successfully replaced {res.occurrences} instance(s) of the string in '{res.path}'",
-                            tool_call_id=runtime.tool_call_id,
+                            tool_call_id=tool_call_id,
                         )
                     ],
                 }
@@ -528,13 +534,15 @@ def _edit_file_tool_generator(
         if res.error:
             return res.error
         if res.files_update is not None:
+            # Ensure tool_call_id is not None
+            tool_call_id = runtime.tool_call_id or f"file_edit_{id(res.path)}"
             return Command(
                 update={
                     "files": res.files_update,
                     "messages": [
                         ToolMessage(
                             content=f"Successfully replaced {res.occurrences} instance(s) of the string in '{res.path}'",
-                            tool_call_id=runtime.tool_call_id,
+                            tool_call_id=tool_call_id,
                         )
                     ],
                 }
@@ -1025,7 +1033,9 @@ class FilesystemMiddleware(AgentMiddleware):
             return message, None
 
         # Write content to filesystem
-        sanitized_id = sanitize_tool_call_id(message.tool_call_id)
+        # Ensure tool_call_id is not None
+        safe_tool_call_id = message.tool_call_id or f"evicted_{id(content_str)}"
+        sanitized_id = sanitize_tool_call_id(safe_tool_call_id)
         file_path = f"/large_tool_results/{sanitized_id}"
         result = resolved_backend.write(file_path, content_str)
         if result.error:
@@ -1034,7 +1044,7 @@ class FilesystemMiddleware(AgentMiddleware):
         # Create truncated preview for the replacement message
         content_sample = format_content_with_line_numbers([line[:1000] for line in content_str.splitlines()[:10]], start_line=1)
         replacement_text = TOO_LARGE_TOOL_MSG.format(
-            tool_call_id=message.tool_call_id,
+            tool_call_id=safe_tool_call_id,
             file_path=file_path,
             content_sample=content_sample,
         )
@@ -1042,7 +1052,7 @@ class FilesystemMiddleware(AgentMiddleware):
         # Always return as plain string after eviction
         processed_message = ToolMessage(
             content=replacement_text,
-            tool_call_id=message.tool_call_id,
+            tool_call_id=safe_tool_call_id,
         )
         return processed_message, result.files_update
 

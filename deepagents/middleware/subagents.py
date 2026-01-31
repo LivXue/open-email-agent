@@ -321,10 +321,12 @@ def _create_task_tool(
         state_update = {k: v for k, v in result.items() if k not in _EXCLUDED_STATE_KEYS}
         # Strip trailing whitespace to prevent API errors with Anthropic
         message_text = result["messages"][-1].text.rstrip() if result["messages"][-1].text else ""
+        # Ensure tool_call_id is not None (shouldn't happen due to earlier check, but be safe)
+        safe_tool_call_id = tool_call_id or f"subagent_{id(message_text)}"
         return Command(
             update={
                 **state_update,
-                "messages": [ToolMessage(message_text, tool_call_id=tool_call_id)],
+                "messages": [ToolMessage(message_text, tool_call_id=safe_tool_call_id)],
             }
         )
 

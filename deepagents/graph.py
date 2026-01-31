@@ -24,6 +24,7 @@ from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.middleware.memory import MemoryMiddleware
 from deepagents.middleware.parse_reasoning_tool_calls import ParseReasoningToolCallsMiddleware
 from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+from deepagents.middleware.patch_tool_message_ids import PatchToolMessageIdsMiddleware
 from deepagents.middleware.skills import SkillsMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent, SubAgent, SubAgentMiddleware
 
@@ -132,6 +133,7 @@ def create_deep_agent(
     # Build middleware stack for subagents (includes skills if provided)
     subagent_middleware: list[AgentMiddleware] = [
         TodoListMiddleware(),
+        PatchToolMessageIdsMiddleware(),  # Patch ToolMessage with None tool_call_id
     ]
 
     backend = backend if backend is not None else (lambda rt: StateBackend(rt))
@@ -156,6 +158,7 @@ def create_deep_agent(
     # Build main agent middleware stack
     deepagent_middleware: list[AgentMiddleware] = [
         TodoListMiddleware(),
+        PatchToolMessageIdsMiddleware(),  # Patch ToolMessage with None tool_call_id
     ]
     if memory is not None:
         deepagent_middleware.append(MemoryMiddleware(backend=backend, sources=memory))

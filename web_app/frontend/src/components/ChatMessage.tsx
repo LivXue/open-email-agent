@@ -67,42 +67,68 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
     let pos = 0;
 
     while (pos < remaining.length) {
-      // Check for reasoning section: 💭 **Reasoning**:\n```\n...\n```\n
-      const reasoningMatch = remaining.slice(pos).match(/\n💭\s*\*\*Reasoning\*\*:\n```\n([\s\S]*?)\n```/);
+      // Check for ALL possible special sections and find the CLOSEST one
+      // This prevents skipping over sections when multiple patterns exist
+
+      // Patterns to check
+      const reasoningPattern = /(?:\r?\n|^)💭\s*\*?\*?Reasoning\*?\*?:\s*\r?\n```\r?\n([\s\S]*?)\r?\n```/;
+      const toolCallPattern = /(?:\r?\n|^)🔧\s*\*?\*?Calling tool\*?\*?:\s*([\w.-]+)\((.*?)\)\r?\n/;
+      const toolResultPattern = /(?:\r?\n|^)✅\s*\*?\*?Tool result\*?\*?:\s*([\w.-]+)\r?\n```\r?\n([\s\S]*?)\r?\n```/;
+
+      // Search for all patterns in the remaining content
+      const remainingFromPos = remaining.slice(pos);
+      const reasoningMatch = remainingFromPos.match(reasoningPattern);
+      const toolCallMatch = remainingFromPos.match(toolCallPattern);
+      const toolResultMatch = remainingFromPos.match(toolResultPattern);
+
+      // Find which match appears first (lowest index)
+      let firstMatch: {
+        type: 'reasoning' | 'tool_call' | 'tool_result';
+        match: RegExpMatchArray;
+        index: number;
+      } | null = null;
+
       if (reasoningMatch && reasoningMatch.index !== undefined) {
-        // Add any text before this match
-        const beforeText = remaining.slice(pos, pos + reasoningMatch.index).trim();
-        if (beforeText) {
-          blocks.push({ type: 'text', content: beforeText });
-        }
-        blocks.push({ type: 'reasoning', content: reasoningMatch[1], title: 'Reasoning' });
-        pos += reasoningMatch.index + reasoningMatch[0].length;
-        continue;
+        firstMatch = { type: 'reasoning', match: reasoningMatch, index: reasoningMatch.index };
       }
-
-      // Check for tool call section: 🔧 **Calling tool**: tool_name(args)\n
-      const toolCallMatch = remaining.slice(pos).match(/\n🔧\s*\*\*Calling tool\*\*:\s*(\w+)\((.*?)\)\n/);
       if (toolCallMatch && toolCallMatch.index !== undefined) {
-        // Add any text before this match
-        const beforeText = remaining.slice(pos, pos + toolCallMatch.index).trim();
-        if (beforeText) {
-          blocks.push({ type: 'text', content: beforeText });
+        if (!firstMatch || toolCallMatch.index < firstMatch.index) {
+          firstMatch = { type: 'tool_call', match: toolCallMatch, index: toolCallMatch.index };
         }
-        blocks.push({ type: 'tool_call', content: toolCallMatch[2], title: `Tool: ${toolCallMatch[1]}` });
-        pos += toolCallMatch.index + toolCallMatch[0].length;
-        continue;
+      }
+      if (toolResultMatch && toolResultMatch.index !== undefined) {
+        if (!firstMatch || toolResultMatch.index < firstMatch.index) {
+          firstMatch = { type: 'tool_result', match: toolResultMatch, index: toolResultMatch.index };
+        }
       }
 
-      // Check for tool result section: ✅ **Tool result**: tool_name\n```\n...\n```\n
-      const toolResultMatch = remaining.slice(pos).match(/\n✅\s*\*\*Tool result\*\*:\s*(\w+)\n```\n([\s\S]*?)\n```/);
-      if (toolResultMatch && toolResultMatch.index !== undefined) {
+      // Process the closest match
+      if (firstMatch) {
         // Add any text before this match
-        const beforeText = remaining.slice(pos, pos + toolResultMatch.index).trim();
+        const beforeText = remaining.slice(pos, pos + firstMatch.index).trim();
         if (beforeText) {
           blocks.push({ type: 'text', content: beforeText });
         }
-        blocks.push({ type: 'tool_result', content: toolResultMatch[2], title: `Result: ${toolResultMatch[1]}` });
-        pos += toolResultMatch.index + toolResultMatch[0].length;
+
+        // Add the matched block based on type
+        if (firstMatch.type === 'reasoning') {
+          blocks.push({ type: 'reasoning', content: firstMatch.match[1]!, title: 'Reasoning' });
+          pos += firstMatch.index + firstMatch.match[0]!.length;
+        } else if (firstMatch.type === 'tool_call') {
+          blocks.push({
+            type: 'tool_call',
+            content: firstMatch.match[2]!,
+            title: `Tool: ${firstMatch.match[1]}`
+          });
+          pos += firstMatch.index + firstMatch.match[0]!.length;
+        } else if (firstMatch.type === 'tool_result') {
+          blocks.push({
+            type: 'tool_result',
+            content: firstMatch.match[2]!,
+            title: `Result: ${firstMatch.match[1]}`
+          });
+          pos += firstMatch.index + firstMatch.match[0]!.length;
+        }
         continue;
       }
 
@@ -118,6 +144,10 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
   };
 
   const sections = parseContentPreservingOrder(message.content);
+
+  // Check if content contains error message
+  const hasError = message.content.includes('❌ **Error**') ||
+                   message.content.includes('\\n\\n❌ **Error**:');
 
   // Check if content already has tool calls/results (formatted text)
   const hasFormattedToolCalls = sections.some(
@@ -136,7 +166,9 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
         className={`max-w-2xl rounded-lg px-4 py-3 ${
           isUser
             ? 'bg-primary-600 text-white'
-            : 'bg-white border border-gray-200 text-gray-900'
+            : hasError
+              ? 'bg-red-50 border-2 border-red-200 text-red-900'
+              : 'bg-white border border-gray-200 text-gray-900'
         }`}
       >
         <div className="prose prose-sm max-w-none break-words prose-headings:font-semibold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-a:text-primary-600 prose-a:no-underline hover:prose-a:underline prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-50 prose-pre:p-3">

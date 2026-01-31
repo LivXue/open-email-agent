@@ -2,6 +2,7 @@ import os
 import json
 import ssl
 import warnings
+import threading
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from contextvars import ContextVar
@@ -39,6 +40,42 @@ else:
     proxy = None
 
 mailbox, smtp_client = None, None
+
+# Global lock to prevent concurrent IMAP operations
+# IMAP connections are not thread-safe
+_imap_lock = threading.RLock()
+
+
+def _check_mailbox_connection():
+    """Check if mailbox connection is still alive, reconnect if needed."""
+    global mailbox
+    if mailbox is None:
+        return False
+
+    try:
+        # Try to list folders to verify connection
+        mailbox.folder.list()
+        return True
+    except Exception as e:
+        print(f"Mailbox connection check failed: {e}")
+        mailbox = None
+        return False
+
+
+def _ensure_mailbox_connection():
+    """Ensure mailbox is connected, reconnect if necessary."""
+    global mailbox
+
+    if mailbox and _check_mailbox_connection():
+        return True
+
+    print("Mailbox not connected, attempting to reconnect...")
+    try:
+        init_email()
+        return mailbox is not None
+    except Exception as e:
+        print(f"Failed to reconnect: {e}")
+        return False
 
 def init_email():
     global mailbox, smtp_client
@@ -157,59 +194,88 @@ def email_dashboard():
     """Get comprehensive email dashboard with detailed statistics for each mailbox folder.
     Use this tool to get an overview of your email inbox and identify folders needing attention.
     """
-    print("Scanning all folders, please be patient... / 正在扫描所有文件夹，请耐心等待...")
-    dashboard = {}
-    
-    folders = mailbox.folder.list()
-    current_time = datetime.now()
-    today = current_time.date()
-    three_days_ago = today - timedelta(days=3)
-    week_ago = today - timedelta(weeks=1)
-    month_ago = today - timedelta(days=30)
-    
-    for folder in folders:
-        folder_name = folder.name
-        if '\\Noselect' in folder.flags:
-            continue
-        
-        print(f"Scanning folder: {folder_name}... / 正在扫描文件夹: {folder_name}...")
-        mailbox.folder.set(folder_name)
-        
-        total_emails = len(list(mailbox.fetch(mark_seen=False)))
-        unread_emails = len(list(mailbox.fetch(AND(seen=False), mark_seen=False)))
-        
-        today_emails = len(list(mailbox.fetch(AND(date_gte=today), mark_seen=False)))
-        three_days_emails = len(list(mailbox.fetch(AND(date_gte=three_days_ago), mark_seen=False)))
-        week_emails = len(list(mailbox.fetch(AND(date_gte=week_ago), mark_seen=False)))
-        month_emails = len(list(mailbox.fetch(AND(date_gte=month_ago), mark_seen=False)))
-        
-        today_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=today), mark_seen=False)))
-        three_days_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=three_days_ago), mark_seen=False)))
-        week_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=week_ago), mark_seen=False)))
-        month_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=month_ago), mark_seen=False)))
-        
-        dashboard[folder_name] = {
-            'total_emails': total_emails,
-            'unread_emails': unread_emails,
-            'emails_today': {
-                'total': today_emails,
-                'unread': today_unread
-            },
-            'emails_in_three_days': {
-                'total': three_days_emails,
-                'unread': three_days_unread
-            },
-            'emails_in_one_week': {
-                'total': week_emails,
-                'unread': week_unread
-            },
-            'emails_in_one_month': {
-                'total': month_emails,
-                'unread': month_unread
-            }
-        }
-    
-    return f"Check time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n" + "-----Info of each folder-----\n" + json.dumps(dashboard, indent=2, ensure_ascii=False)
+    global mailbox, smtp_client
+
+    # Use lock to prevent concurrent IMAP operations
+    with _imap_lock:
+        print("Scanning all folders, please be patient... / 正在扫描所有文件夹，请耐心等待...")
+        dashboard = {}
+
+        # Ensure mailbox is connected
+        if not _ensure_mailbox_connection():
+            return "Error: Email service not connected. Please try again."
+
+        try:
+            folders = mailbox.folder.list()
+        except Exception as e:
+            # Try to reconnect
+            print(f"IMAP error while listing folders: {e}. Attempting to reconnect...")
+            try:
+                init_email()
+                if mailbox is None:
+                    return "Error: Failed to reconnect to email service."
+                folders = mailbox.folder.list()
+            except Exception as e2:
+                return f"Error: Failed to connect to email service: {e2}"
+
+        current_time = datetime.now()
+        today = current_time.date()
+        three_days_ago = today - timedelta(days=3)
+        week_ago = today - timedelta(weeks=1)
+        month_ago = today - timedelta(days=30)
+
+        for folder in folders:
+            folder_name = folder.name
+            if '\\Noselect' in folder.flags:
+                continue
+
+            print(f"Scanning folder: {folder_name}... / 正在扫描文件夹: {folder_name}...")
+
+            # Try-except wrapper for folder operations
+            try:
+                mailbox.folder.set(folder_name)
+
+                total_emails = len(list(mailbox.fetch(mark_seen=False)))
+                unread_emails = len(list(mailbox.fetch(AND(seen=False), mark_seen=False)))
+
+                today_emails = len(list(mailbox.fetch(AND(date_gte=today), mark_seen=False)))
+                three_days_emails = len(list(mailbox.fetch(AND(date_gte=three_days_ago), mark_seen=False)))
+                week_emails = len(list(mailbox.fetch(AND(date_gte=week_ago), mark_seen=False)))
+                month_emails = len(list(mailbox.fetch(AND(date_gte=month_ago), mark_seen=False)))
+
+                today_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=today), mark_seen=False)))
+                three_days_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=three_days_ago), mark_seen=False)))
+                week_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=week_ago), mark_seen=False)))
+                month_unread = len(list(mailbox.fetch(AND(seen=False, date_gte=month_ago), mark_seen=False)))
+
+                dashboard[folder_name] = {
+                    'total_emails': total_emails,
+                    'unread_emails': unread_emails,
+                    'emails_today': {
+                        'total': today_emails,
+                        'unread': today_unread
+                    },
+                    'emails_in_three_days': {
+                        'total': three_days_emails,
+                        'unread': three_days_unread
+                    },
+                    'emails_in_one_week': {
+                        'total': week_emails,
+                        'unread': week_unread
+                    },
+                    'emails_in_one_month': {
+                        'total': month_emails,
+                        'unread': month_unread
+                    }
+                }
+            except Exception as e:
+                print(f"Error scanning folder {folder_name}: {e}")
+                dashboard[folder_name] = {
+                    'error': f"Failed to scan folder: {str(e)}"
+                }
+                continue
+
+        return f"Check time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n" + "-----Info of each folder-----\n" + json.dumps(dashboard, indent=2, ensure_ascii=False)
 
 
 @tool

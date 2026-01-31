@@ -256,6 +256,23 @@ export function ChatPage() {
       case 'error':
         // Display error message as toast notification
         showError(message.content);
+
+        // Also add error message to the chat for visibility
+        setMessages((prev) => {
+          const lastMessage = prev[prev.length - 1];
+          if (lastMessage?.role === 'assistant') {
+            // Append error to the last assistant message
+            return prev.map((msg, idx) =>
+              idx === prev.length - 1
+                ? {
+                    ...msg,
+                    content: msg.content + `\n\n❌ **Error**: ${message.content}`
+                  }
+                : msg
+            );
+          }
+          return prev;
+        });
         break;
     }
   }, [showError]); // No dependencies - use ref for current session
