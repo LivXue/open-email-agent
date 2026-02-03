@@ -11,7 +11,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from datetime import datetime, UTC
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Form, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -53,6 +53,9 @@ email_initialized = False
 agent_initialized = False
 email_imap_connected = False
 email_smtp_connected = False
+
+# Temporary files storage: {session_id: [{filename, original_filename, uploaded_at}]}
+session_temp_files = {}
 
 app = FastAPI(title="MailMind API")
 
@@ -344,17 +347,35 @@ def initialize_agent_for_session(session_id: str):
         max_file_size_mb=10,  # 10MB
     )
 
-    # Create agent with session-specific filesystem
+    # Load temporary files for this session
+    temp_files_with_content = []
+    temp_files = get_session_temp_files(session_id)
+    temp_dir = get_session_temp_dir(session_id)
+
+    for file_info in temp_files:
+        filepath = os.path.join(temp_dir, file_info["filename"])
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                temp_files_with_content.append({
+                    "filename": file_info["filename"],
+                    "content": content
+                })
+            except Exception as e:
+                print(f"Warning: Failed to load temp file {file_info['filename']}: {e}")
+
+    # Create agent with session-specific filesystem and temporary files
     session_agent = create_deep_agent(
         model=get_or_init_chat_model(),
-        system_prompt=get_main_prompt(),
+        system_prompt=get_main_prompt(temp_files_with_content if temp_files_with_content else None),
         backend=filesystem_backend,
         tools=[internet_search] + list(get_imports().values()),
         subagents=[email_writer_subagent]
     )
 
     agent_initialized = True
-    print(f"Agent initialized for session {session_id} with filesystem at {fs_base_dir}")
+    print(f"Agent initialized for session {session_id} with filesystem at {fs_base_dir} and {len(temp_files_with_content)} temp files")
 
     return session_agent
 
@@ -703,10 +724,270 @@ async def get_all_groups():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== Knowledge Base APIs ====================
+
+KNOWLEDGE_DIR = os.path.join(project_root, "knowledge")
+
+
+def ensure_knowledge_dir():
+    """Ensure knowledge directory exists."""
+    if not os.path.exists(KNOWLEDGE_DIR):
+        os.makedirs(KNOWLEDGE_DIR)
+
+
+@app.get("/api/knowledge")
+async def list_knowledge():
+    """List all knowledge documents."""
+    try:
+        ensure_knowledge_dir()
+
+        knowledge_files = []
+        for filename in os.listdir(KNOWLEDGE_DIR):
+            filepath = os.path.join(KNOWLEDGE_DIR, filename)
+            if os.path.isfile(filepath):
+                stat = os.stat(filepath)
+                knowledge_files.append({
+                    "filename": filename,
+                    "size": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+
+        # Sort by filename
+        knowledge_files.sort(key=lambda x: x["filename"])
+
+        return {
+            "status": "success",
+            "files": knowledge_files,
+            "total": len(knowledge_files)
+        }
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.get("/api/knowledge/{filename}")
+async def get_knowledge_file(filename: str):
+    """Get content of a specific knowledge document."""
+    try:
+        ensure_knowledge_dir()
+
+        # Security: Validate filename to prevent path traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        filepath = os.path.join(KNOWLEDGE_DIR, filename)
+
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "content": content
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.post("/api/knowledge")
+async def create_knowledge_file(
+    file: Optional[UploadFile] = None,
+    filename: Optional[str] = Form(None),
+    content: Optional[str] = Form(None)
+):
+    """Create a new knowledge document.
+
+    Supports two methods:
+    1. Upload a file (.txt, .md, .docx, .pdf, .doc) - binary formats are converted to text
+    2. Create from text content
+
+    All files are stored as plain text for agent filesystem compatibility.
+    """
+    try:
+        ensure_knowledge_dir()
+
+        # Method 1: File upload
+        if file is not None:
+            import lib.document_parser as doc_parser
+            import tempfile
+            import shutil
+
+            # Use uploaded filename
+            original_filename = file.filename or "uploaded_file"
+            safe_filename = original_filename
+
+            # Security: Validate filename to prevent path traversal
+            if ".." in safe_filename or "/" in safe_filename or "\\" in safe_filename:
+                raise HTTPException(status_code=400, detail="Invalid filename")
+
+            # Check if format is supported
+            if not doc_parser.DocumentParser.is_supported_format(safe_filename):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file format. Supported formats: {', '.join(doc_parser.DocumentParser.get_supported_extensions())}"
+                )
+
+            # Determine the target filename (always store as .txt or .md for agent compatibility)
+            name_without_ext = os.path.splitext(safe_filename)[0]
+            ext = os.path.splitext(safe_filename)[1].lower()
+
+            # Convert binary formats to .md, keep text formats as-is
+            if ext in ['.docx', '.pdf', '.doc']:
+                target_filename = f"{name_without_ext}.md"
+            elif ext == '.txt':
+                target_filename = safe_filename
+            else:  # .md or others
+                target_filename = safe_filename if ext == '.md' else f"{name_without_ext}.md"
+
+            filepath = os.path.join(KNOWLEDGE_DIR, target_filename)
+
+            if os.path.exists(filepath):
+                raise HTTPException(status_code=400, detail=f"File already exists ({target_filename})")
+
+            # Save uploaded file to temporary location first
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+                content_bytes = await file.read()
+                tmp_file.write(content_bytes)
+                tmp_path = tmp_file.name
+
+            try:
+                # Extract text content from uploaded file
+                if ext in ['.txt', '.md']:
+                    # Text files - read directly and save
+                    with open(tmp_path, 'r', encoding='utf-8') as f:
+                        text_content = f.read()
+                else:
+                    # Binary formats - use document parser
+                    text_content = doc_parser.DocumentParser.extract_text(tmp_path)
+
+                # Save as plain text file
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(text_content)
+
+                return {
+                    "status": "success",
+                    "message": f"Knowledge document '{target_filename}' created successfully (converted from {ext})",
+                    "filename": target_filename
+                }
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+
+        # Method 2: Create from text content
+        elif filename is not None and content is not None:
+            # Security: Validate filename to prevent path traversal
+            if ".." in filename or "/" in filename or "\\" in filename:
+                raise HTTPException(status_code=400, detail="Invalid filename")
+
+            # Ensure filename has .md or .txt extension
+            if not filename.endswith((".md", ".txt")):
+                filename += ".md"
+
+            filepath = os.path.join(KNOWLEDGE_DIR, filename)
+
+            if os.path.exists(filepath):
+                raise HTTPException(status_code=400, detail="File already exists")
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            return {
+                "status": "success",
+                "message": f"Knowledge document '{filename}' created successfully",
+                "filename": filename
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Either upload a file or provide both filename and content"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.put("/api/knowledge/{filename}")
+async def update_knowledge_file(
+    filename: str,
+    content: str = Form(...)
+):
+    """Update an existing knowledge document."""
+    try:
+        ensure_knowledge_dir()
+
+        # Security: Validate filename to prevent path traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        filepath = os.path.join(KNOWLEDGE_DIR, filename)
+
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return {
+            "status": "success",
+            "message": f"Knowledge document '{filename}' updated successfully",
+            "filename": filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.delete("/api/knowledge/{filename}")
+async def delete_knowledge_file(filename: str):
+    """Delete a knowledge document."""
+    try:
+        ensure_knowledge_dir()
+
+        # Security: Validate filename to prevent path traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        filepath = os.path.join(KNOWLEDGE_DIR, filename)
+
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        os.remove(filepath)
+
+        return {
+            "status": "success",
+            "message": f"Knowledge document '{filename}' deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a chat session and its agent instance."""
-    global agent_instances
+    global agent_instances, session_temp_files
 
     try:
         # Remove agent instance for this session
@@ -719,15 +1000,22 @@ async def delete_session(session_id: str):
         email_tools_module.clear_emails_cache(session_id)
         print(f"Email cache cleared for session: {session_id}")
 
-        # Clean up filesystem directory
+        # Clean up temporary files metadata
+        if session_id in session_temp_files:
+            del session_temp_files[session_id]
+            print(f"Temporary files metadata cleared for session: {session_id}")
+
+        # Clean up filesystem directory (including temp_uploads)
         fs_base_dir = os.path.join(project_root, "agent_fs", session_id)
         if os.path.exists(fs_base_dir):
             import shutil
             try:
                 shutil.rmtree(fs_base_dir)
-                print(f"Filesystem deleted for session: {session_id}")
+                print(f"Filesystem directory deleted for session: {session_id} @ {fs_base_dir}")
             except Exception as e:
                 print(f"Warning: Could not delete filesystem for session {session_id}: {e}")
+        else:
+            print(f"Filesystem directory not found for session: {session_id} @ {fs_base_dir}")
 
         return {
             "status": "success",
@@ -2092,6 +2380,226 @@ async def websocket_chat(websocket: WebSocket):
         print(f"WebSocket error: {e}")
         if chat_session_id in active_connections:
             del active_connections[chat_session_id]
+
+
+# ==================== Temporary File Upload API ====================
+
+def get_session_temp_dir(session_id: str) -> str:
+    """Get the temporary files directory for a session."""
+    temp_dir = os.path.join(project_root, "agent_fs", session_id, "temp_uploads")
+    os.makedirs(temp_dir, exist_ok=True)
+    return temp_dir
+
+
+def get_session_temp_files(session_id: str) -> list:
+    """Get list of temporary files for a session."""
+    if session_id not in session_temp_files:
+        # Try to restore from filesystem
+        temp_dir = get_session_temp_dir(session_id)
+        if os.path.exists(temp_dir):
+            files = []
+            for filename in os.listdir(temp_dir):
+                filepath = os.path.join(temp_dir, filename)
+                if os.path.isfile(filepath):
+                    files.append({
+                        "filename": filename,
+                        "original_filename": filename,
+                        "uploaded_at": datetime.fromtimestamp(os.path.getmtime(filepath), UTC).isoformat()
+                    })
+            session_temp_files[session_id] = files
+        else:
+            session_temp_files[session_id] = []
+    return session_temp_files[session_id]
+
+
+def add_temp_file(session_id: str, filename: str, original_filename: str):
+    """Add a temporary file record for a session."""
+    if session_id not in session_temp_files:
+        session_temp_files[session_id] = []
+    session_temp_files[session_id].append({
+        "filename": filename,
+        "original_filename": original_filename,
+        "uploaded_at": datetime.now(UTC).isoformat()
+    })
+
+
+def remove_temp_file(session_id: str, filename: str):
+    """Remove a temporary file record for a session."""
+    if session_id in session_temp_files:
+        session_temp_files[session_id] = [
+            f for f in session_temp_files[session_id] if f["filename"] != filename
+        ]
+
+
+@app.post("/api/sessions/{session_id}/temp-files")
+async def upload_temp_file(
+    session_id: str,
+    file: UploadFile
+):
+    """Upload a temporary file for a session.
+
+    Temporary files are:
+    - Only accessible to the agent in this session
+    - Stored in the session's filesystem (agent_fs/session_id/temp_uploads/)
+    - Not saved to the global knowledge base
+    - Deleted when the session is deleted
+    """
+    import lib.document_parser as doc_parser
+    import tempfile
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    original_filename = file.filename
+    safe_filename = original_filename
+
+    # Security: Validate filename
+    if ".." in safe_filename or "/" in safe_filename or "\\" in safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Check if format is supported
+    if not doc_parser.DocumentParser.is_supported_format(safe_filename):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format. Supported formats: {', '.join(doc_parser.DocumentParser.get_supported_extensions())}"
+        )
+
+    # Determine target filename (convert to .md for binary formats)
+    name_without_ext = os.path.splitext(safe_filename)[0]
+    ext = os.path.splitext(safe_filename)[1].lower()
+
+    if ext in ['.docx', '.pdf', '.doc']:
+        target_filename = f"{name_without_ext}.md"
+    elif ext == '.txt':
+        target_filename = safe_filename
+    else:
+        target_filename = safe_filename if ext == '.md' else f"{name_without_ext}.md"
+
+    # Get session temp directory
+    temp_dir = get_session_temp_dir(session_id)
+    target_filepath = os.path.join(temp_dir, target_filename)
+
+    # Handle duplicate filenames
+    counter = 1
+    while os.path.exists(target_filepath):
+        base, ext2 = os.path.splitext(target_filename)
+        target_filename = f"{base}_{counter}{ext2}"
+        target_filepath = os.path.join(temp_dir, target_filename)
+        counter += 1
+
+    # Save to temp file first
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+        content_bytes = await file.read()
+        tmp_file.write(content_bytes)
+        tmp_path = tmp_file.name
+
+    try:
+        # Extract text content
+        if ext in ['.txt', '.md']:
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                text_content = f.read()
+        else:
+            text_content = doc_parser.DocumentParser.extract_text(tmp_path)
+
+        # Save to session temp directory
+        with open(target_filepath, 'w', encoding='utf-8') as f:
+            f.write(text_content)
+
+        # Record in session temp files
+        add_temp_file(session_id, target_filename, original_filename)
+
+        return {
+            "status": "success",
+            "message": f"Temporary file '{target_filename}' uploaded successfully",
+            "filename": target_filename,
+            "original_filename": original_filename
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+
+
+@app.get("/api/sessions/{session_id}/temp-files")
+async def list_temp_files(session_id: str):
+    """List all temporary files for a session."""
+    files = get_session_temp_files(session_id)
+    return {
+        "status": "success",
+        "files": files
+    }
+
+
+@app.delete("/api/sessions/{session_id}/temp-files/{filename}")
+async def delete_temp_file(session_id: str, filename: str):
+    """Delete a temporary file for a session."""
+    # Security: Validate filename
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    temp_dir = get_session_temp_dir(session_id)
+    filepath = os.path.join(temp_dir, filename)
+
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        os.remove(filepath)
+        remove_temp_file(session_id, filename)
+        return {
+            "status": "success",
+            "message": f"Temporary file '{filename}' deleted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+
+
+@app.get("/api/sessions/{session_id}/temp-files/{filename}/content")
+async def get_temp_file_content(session_id: str, filename: str):
+    """Get the content of a temporary file."""
+    # Security: Validate filename
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    temp_dir = get_session_temp_dir(session_id)
+    filepath = os.path.join(temp_dir, filename)
+
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return {
+            "status": "success",
+            "filename": filename,
+            "content": content
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+@app.post("/api/sessions/{session_id}/reload-agent")
+async def reload_session_agent(session_id: str):
+    """Reload the agent for a session (e.g., after temp files are updated).
+
+    This will reinitialize the agent with updated temporary files in the prompt.
+    """
+    global agent_instances
+
+    if session_id not in agent_instances:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        # Reinitialize the agent with updated temp files
+        agent_instances[session_id] = initialize_agent_for_session(session_id)
+        return {
+            "status": "success",
+            "message": f"Agent reloaded for session {session_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload agent: {str(e)}")
 
 
 if __name__ == "__main__":

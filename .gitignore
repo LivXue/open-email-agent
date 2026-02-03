@@ -231,3 +231,6 @@ agent_fs/
 
 # Project-specific
 tmp/
+
+# Knowledge files
+knowledge/*

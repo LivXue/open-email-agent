@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, Mail, Users, Settings } from 'lucide-react';
+import { MessageSquare, Mail, Users, FileText, Settings } from 'lucide-react';
 import { StatusBar } from './StatusBar';
 
 interface LayoutProps {
@@ -13,6 +13,7 @@ export function Layout({ children }: LayoutProps) {
     { path: '/', label: 'Chat', icon: MessageSquare },
     { path: '/emails', label: 'Emails', icon: Mail },
     { path: '/contacts', label: 'Contacts', icon: Users },
+    { path: '/knowledge', label: 'Knowledge', icon: FileText },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 

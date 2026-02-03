@@ -4,7 +4,7 @@
 
   ### Your Email System Can Finally Do Jobs For You!
 
-  ![Version](https://img.shields.io/badge/version-0.0.4-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.0.5-blue.svg)
   ![Status](https://img.shields.io/badge/status-beta-orange.svg)
   ![License](https://img.shields.io/badge/license-MIT-green.svg)
   ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
@@ -24,25 +24,41 @@
 
 <div>
 
-## 🎉 What's New in v0.0.4
+## 🎉 What's New in v0.0.5
 
-### ✨ AI-Powered Email Writing
+### 📚 Knowledge Base & Temporary File Upload
 
-We've added AI-powered email writing capabilities to help you draft emails faster and more efficiently!
+We've added powerful file management capabilities to enhance your AI experience!
 
-#### **Features:**
+#### **Knowledge Base Feature:**
 
-- **🤖 AI Reply** - Generate intelligent replies to incoming emails with one click
-- **✍️ AI Compose** - Write new emails from scratch with AI assistance
-- **📤 AI Forward** - Create professional forwarding messages instantly
-- **🎨 Custom Instructions** - Guide the AI with your own prompts or use quick templates
-- **⚡ Quick Templates** - Pre-built templates for common email scenarios
+- **📁 Document Management** - Upload, create, edit, and delete knowledge documents
+- **📄 Multi-Format Support** - Supports .txt, .md, .docx, .pdf, and .doc files
+- **🔄 Auto Conversion** - .docx, .pdf, and .doc files automatically converted to .md for AI compatibility
+- **✏️ In-App Editing** - Edit .txt and .md files directly in the browser
+- **🎯 Persistent Context** - Knowledge base files are always accessible to AI across all sessions
+
+#### **Temporary File Upload:**
+
+- **💬 Session-Specific Files** - Upload files specific to each chat session
+- **📂 Agent Filesystem Access** - Files are stored in agent's filesystem at `temp_uploads/`
+- **🔧 Tool Integration** - AI can read and process uploaded files using file tools
+- **🚀 Instant Availability** - Files immediately available without agent reload
+- **🗑️ Easy Management** - Delete temporary files with one click
 
 #### **How It Works:**
 
-1. **Reply Mode**: Choose from templates like "Professional", "Friendly", "Brief", "Grateful", "Request Meeting", or "Ask Questions"
-2. **Forward Mode**: Add introductions, highlight key points, or request actions
-3. **Compose Mode**: Write meeting requests, follow-ups, thank you notes, inquiries, or proposals
+**Knowledge Base:**
+1. Navigate to the **Knowledge** page
+2. Upload documents (.txt, .md, .docx, .pdf, .doc) or create new text files
+3. Edit content directly in the browser
+4. AI automatically has access to all knowledge base documents
+
+**Temporary Files (Chat):**
+1. In the Chat page, click the **Add File** button next to the input box
+2. Select a file to upload (max 10MB, same formats as knowledge base)
+3. File appears as a tag above the input box
+4. AI can access the file via its filesystem tools during the session
 
 </div>
 
@@ -88,6 +104,28 @@ We've added AI-powered email writing capabilities to help you draft emails faste
 - Multi-session support
 - Real-time streaming
 - Attachment handling
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 📚 Knowledge Base
+- Upload & manage documents
+- Multi-format support (.txt, .md, .docx, .pdf, .doc)
+- Auto conversion to .md
+- In-app editing for text files
+- Global AI access across sessions
+
+</td>
+<td>
+
+### 📎 Temporary File Upload
+- Session-specific file uploads
+- Agent filesystem integration
+- Files accessible via tools
+- Instant availability
+- Easy file management
 
 </td>
 </tr>
@@ -478,7 +516,7 @@ Each chat session maintains:
 ## 📝 TODO List
 
 - [ ] **Email Box** - Intelligent email client interface
-- [ ] **User File Upload** - Upload files for AI chat
+- [x] **User File Upload** - Upload files for AI chat ✅ (v0.0.5)
 - [ ] **Long-term Memory** - Store and retrieve conversation facts
 - [ ] **Advanced Search** - AI-powered categorization
 - [ ] **Multi-Account Support** - Multiple email accounts

@@ -1,7 +1,103 @@
 from datetime import datetime
+import os
 
-def get_main_prompt():
-    return f"""You are MailMind, an email management assistant helping the user manage their email communications. For context, current time is {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.
+def load_knowledge_content():
+    """Load all knowledge files content.
+
+    All files in the knowledge directory are stored as plain text (.txt or .md)
+    for agent filesystem compatibility. Binary formats are automatically converted
+    during upload.
+    """
+    knowledge_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge")
+
+    if not os.path.exists(knowledge_dir):
+        return ""
+
+    knowledge_content = []
+
+    for filename in sorted(os.listdir(knowledge_dir)):
+        filepath = os.path.join(knowledge_dir, filename)
+        if not os.path.isfile(filepath):
+            continue
+
+        ext = os.path.splitext(filename)[1].lower()
+
+        # Only process text files (.txt and .md)
+        if ext not in ['.txt', '.md']:
+            continue
+
+        try:
+            # Read text content directly
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Add file header and content
+            knowledge_content.append(f"\n## {filename}\n{content}")
+
+        except Exception as e:
+            print(f"Warning: Failed to load knowledge file {filename}: {e}")
+            continue
+
+    return "\n".join(knowledge_content) if knowledge_content else ""
+
+
+def load_temp_files_content(temp_files_list):
+    """Load temporary files content for a session.
+
+    Args:
+        temp_files_list: List of dicts with keys: filename, content
+
+    Returns:
+        Formatted string with all temporary file contents
+    """
+    if not temp_files_list:
+        return ""
+
+    temp_content = []
+    for file_info in sorted(temp_files_list, key=lambda x: x['filename']):
+        filename = file_info['filename']
+        content = file_info.get('content', '')
+        temp_content.append(f"\n## {filename}\n{content}")
+
+    return "\n".join(temp_content) if temp_content else ""
+
+
+def get_main_prompt(temp_files_list=None):
+    """Get the main system prompt with optional temporary files.
+
+    Args:
+        temp_files_list: Optional list of temporary file dicts for this session
+    """
+    knowledge_content = load_knowledge_content()
+
+    knowledge_section = ""
+    if knowledge_content:
+        knowledge_section = f"""
+
+<user_knowledge>
+The following knowledge documents are available for reference:
+
+{knowledge_content}
+</user_knowledge>
+"""
+
+    # Add temporary files section if provided
+    temp_files_section = ""
+    if temp_files_list:
+        temp_content = load_temp_files_content(temp_files_list)
+        if temp_content:
+            temp_files_section = f"""
+
+<session_temp_files>
+The following temporary files have been uploaded for this session and are available for reference:
+
+{temp_content}
+
+Note: These files are only available for this session and will not be saved to the global knowledge base.
+</session_temp_files>
+"""
+
+    return f"""You are MailMind, an email management assistant helping the user manage their email communications. For context, current time is {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.{knowledge_section}{temp_files_section}
 
 <Task>
 Your job is to use tools to manage the user's email inbox efficiently.

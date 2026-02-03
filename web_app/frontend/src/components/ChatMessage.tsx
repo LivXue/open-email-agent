@@ -27,17 +27,17 @@ function CollapsibleSection({ title, icon, children, defaultOpen = false }: Coll
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className="my-2 border border-gray-200 rounded-lg overflow-hidden">
+    <div className="my-1.5 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center gap-2 text-sm font-medium text-gray-700 transition-colors"
+        className="w-full px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-150 flex items-center gap-2 text-sm font-medium text-gray-700 transition-all duration-200"
       >
-        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        {isOpen ? <ChevronDown className="w-4 h-4 transition-transform duration-200" /> : <ChevronRight className="w-4 h-4 transition-transform duration-200" />}
         <span className="text-base">{icon}</span>
-        <span>{title}</span>
+        <span className="font-semibold">{title}</span>
       </button>
       {isOpen && (
-        <div className="p-3 bg-white border-t border-gray-200">
+        <div className="p-2.5 bg-white border-t border-gray-200">
           {children}
         </div>
       )}
@@ -155,23 +155,23 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
   );
 
  return (
-    <div className={`flex w-full gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex w-full gap-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-          <Bot className="w-5 h-5 text-primary-700" />
+        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-md">
+          <Bot className="w-7 h-7 text-white" />
         </div>
       )}
 
       <div
-        className={`max-w-2xl rounded-lg px-4 py-3 ${
+        className={`rounded-xl px-4 py-3 shadow-sm ${
           isUser
-            ? 'bg-primary-600 text-white'
+            ? 'bg-gradient-to-br from-primary-600 to-primary-700 text-white shadow-md max-w-[90%]'
             : hasError
-              ? 'bg-red-50 border-2 border-red-200 text-red-900'
-              : 'bg-white border border-gray-200 text-gray-900'
+              ? 'bg-red-50 border-2 border-red-300 text-red-900 max-w-[95%]'
+              : 'bg-white border border-gray-200 text-gray-900 max-w-[95%]'
         }`}
       >
-        <div className="prose prose-sm max-w-none break-words prose-headings:font-semibold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-a:text-primary-600 prose-a:no-underline hover:prose-a:underline prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-50 prose-pre:p-3">
+        <div className="prose prose-sm max-w-none break-words prose-headings:font-semibold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-a:text-primary-600 prose-a:no-underline hover:prose-a:underline prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-50 prose-pre:p-3">
           {isUser ? (
             <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
           ) : (
@@ -181,7 +181,7 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
               } else if (section.type === 'reasoning') {
                 return (
                   <CollapsibleSection key={index} title={section.title || 'Reasoning'} icon="💭" defaultOpen={false}>
-                    <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                    <pre className="text-xs bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-words leading-relaxed border border-gray-200">
                       {section.content}
                     </pre>
                   </CollapsibleSection>
@@ -189,7 +189,7 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
               } else if (section.type === 'tool_call') {
                 return (
                   <CollapsibleSection key={index} title={section.title || 'Tool Call'} icon="🔧" defaultOpen={true}>
-                    <code className="text-xs bg-gray-50 px-2 py-1 rounded font-mono block">
+                    <code className="text-xs bg-gray-50 px-2.5 py-1.5 rounded-md font-mono block border border-gray-200">
                       {section.content}
                     </code>
                   </CollapsibleSection>
@@ -197,7 +197,7 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
               } else if (section.type === 'tool_result') {
                 return (
                   <CollapsibleSection key={index} title={section.title || 'Tool Result'} icon="✅" defaultOpen={false}>
-                    <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                    <pre className="text-xs bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-words leading-relaxed border border-gray-200">
                       {section.content}
                     </pre>
                   </CollapsibleSection>
@@ -210,11 +210,11 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
 
         {/* Only show toolCalls array if content doesn't already have formatted tool calls */}
         {!hasFormattedToolCalls && message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-3 space-y-2">
+          <div className="mt-2 space-y-1.5">
             {message.toolCalls.map((toolCall, index) => (
               <div
                 key={index}
-                className="text-xs bg-gray-50 border border-gray-200 rounded p-2"
+                className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-2 shadow-sm"
               >
                 <div className="font-mono text-gray-700 break-all">
                   <span className="font-semibold">{toolCall.tool}</span>
@@ -223,7 +223,7 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
                   </span>
                 </div>
                 {toolCall.result && (
-                  <div className="mt-1 text-gray-600 whitespace-pre-wrap break-words">
+                  <div className="mt-1.5 text-gray-600 whitespace-pre-wrap break-words">
                     {toolCall.result}
                   </div>
                 )}
@@ -237,22 +237,22 @@ export function ChatMessage({ message, onDelete }: ChatMessageProps) {
             isUser ? 'text-primary-200' : 'text-gray-500'
           }`}
         >
-          <span>{message.timestamp.toLocaleTimeString()}</span>
+          <span className="font-medium">{message.timestamp.toLocaleTimeString()}</span>
           {isUser && onDelete && (
             <button
               onClick={() => onDelete(message.id)}
-              className="opacity-60 hover:opacity-100 transition-opacity flex items-center gap-1"
+              className="opacity-60 hover:opacity-100 transition-all duration-200 flex items-center gap-1 hover:scale-105"
               title="Delete this message and all subsequent messages"
             >
-              <Trash2 className="w-3 h-3" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
       {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-          <User className="w-5 h-5 text-gray-600" />
+        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center shadow-md">
+          <User className="w-7 h-7 text-white" />
         </div>
       )}
     </div>
